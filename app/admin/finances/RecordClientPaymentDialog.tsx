@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, DollarSign, Receipt } from "lucide-react";
+import { useState, useTransition } from "react";
+import { Plus, DollarSign, Receipt, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -24,9 +24,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { invoices, paymentMethods } from "@/lib/mockData";
+import { paymentMethods } from "@/lib/constants";
+import { recordClientPayment } from "@/lib/actions";
 
-export function RecordClientPaymentDialog() {
+type Invoice = { id: string; client: string; amount: number; status: string };
+
+export function RecordClientPaymentDialog({ invoices }: { invoices: Invoice[] }) {
   const [open, setOpen] = useState(false);
   const [invoiceId, setInvoiceId] = useState("");
   const [amount, setAmount] = useState("");
@@ -34,21 +37,35 @@ export function RecordClientPaymentDialog() {
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [reference, setReference] = useState("");
   const [notes, setNotes] = useState("");
+  const [isPending, startTransition] = useTransition();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setOpen(false);
-    setInvoiceId("");
-    setAmount("");
-    setMethod("");
-    setReference("");
-    setNotes("");
+    startTransition(async () => {
+      const result = await recordClientPayment({
+        invoiceId,
+        date,
+        amount: parseFloat(amount),
+        method,
+        reference: reference || undefined,
+        notes: notes || undefined,
+      });
+
+      if (result.ok) {
+        setOpen(false);
+        setInvoiceId("");
+        setAmount("");
+        setMethod("");
+        setReference("");
+        setNotes("");
+      }
+    });
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm">
+        <Button size="sm" disabled={invoices.length === 0}>
           <Plus className="w-4 h-4" strokeWidth={2.5} />
           Record Payment
         </Button>
@@ -58,7 +75,10 @@ export function RecordClientPaymentDialog() {
           <DialogHeader>
             <div className="flex items-start gap-3">
               <div className="w-9 h-9 rounded-md bg-green-profit-subtle border border-green-profit/30 flex items-center justify-center shrink-0 mt-0.5">
-                <DollarSign className="w-4 h-4 text-green-profit" strokeWidth={1.75} />
+                <DollarSign
+                  className="w-4 h-4 text-green-profit"
+                  strokeWidth={1.75}
+                />
               </div>
               <div>
                 <DialogTitle>Record Client Payment</DialogTitle>
@@ -80,7 +100,9 @@ export function RecordClientPaymentDialog() {
                   {invoices.map((inv) => (
                     <SelectItem key={inv.id} value={inv.id}>
                       <div className="flex items-center gap-2">
-                        <span className="font-medium">{inv.id}</span>
+                        <span className="font-mono text-xs">
+                          {inv.id.slice(0, 12)}
+                        </span>
                         <span className="text-text-muted">·</span>
                         <span className="text-text-secondary">{inv.client}</span>
                       </div>
@@ -164,13 +186,22 @@ export function RecordClientPaymentDialog() {
 
           <DialogFooter>
             <DialogClose asChild>
-              <Button type="button" variant="ghost" size="sm">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={isPending}
+              >
                 Cancel
               </Button>
             </DialogClose>
-            <Button type="submit" size="sm">
-              <Receipt className="w-4 h-4" strokeWidth={2} />
-              Record Payment
+            <Button type="submit" size="sm" disabled={isPending}>
+              {isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2} />
+              ) : (
+                <Receipt className="w-4 h-4" strokeWidth={2} />
+              )}
+              {isPending ? "Recording…" : "Record Payment"}
             </Button>
           </DialogFooter>
         </form>

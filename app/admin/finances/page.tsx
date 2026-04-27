@@ -1,7 +1,21 @@
 import { Header } from "@/components/layout/Header";
 import { FinancesView } from "./FinancesView";
+import {
+  getClientPayments,
+  getPhotographerPayments,
+  getOpenInvoices,
+  getAllPhotographers,
+} from "@/lib/data";
 
-export default function FinancesPage() {
+export default async function FinancesPage() {
+  const [clientPayments, photographerPayments, openInvoices, photographers] =
+    await Promise.all([
+      getClientPayments(),
+      getPhotographerPayments(),
+      getOpenInvoices(),
+      getAllPhotographers(),
+    ]);
+
   return (
     <div className="flex flex-col min-h-screen">
       <Header
@@ -11,16 +25,19 @@ export default function FinancesPage() {
 
       <div className="flex-1 p-6 space-y-5">
         <div className="opacity-0 animate-fade-in">
-          <h2 className="font-serif text-2xl text-text-primary">
-            Cash Flow
-          </h2>
+          <h2 className="font-serif text-2xl text-text-primary">Cash Flow</h2>
           <p className="text-sm font-sans text-text-secondary mt-0.5">
-            April 2026 · Money in, money out, profit margin.
+            Money in, money out, profit margin.
           </p>
         </div>
 
         <div className="opacity-0 animate-fade-in-delay-1">
-          <FinancesView />
+          <FinancesView
+            clientPayments={clientPayments}
+            photographerPayments={photographerPayments}
+            openInvoices={openInvoices}
+            photographers={photographers}
+          />
         </div>
       </div>
     </div>

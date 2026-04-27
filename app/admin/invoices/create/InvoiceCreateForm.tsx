@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -16,6 +16,7 @@ import {
   Save,
   Sparkles,
   Send,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -30,15 +31,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatBDTWithDecimals as formatCurrency } from "@/lib/currency";
+import { createInvoice } from "@/lib/actions";
 
-const mockPhotographers = [
-  { id: "p1", name: "James Okafor", specialty: "Weddings" },
-  { id: "p2", name: "Priya Mehta", specialty: "Corporate" },
-  { id: "p3", name: "Sofia Reyes", specialty: "Portrait" },
-  { id: "p4", name: "Marcus Tanaka", specialty: "Events" },
-  { id: "p5", name: "Anya Volkov", specialty: "Fashion" },
-  { id: "p6", name: "David Chen", specialty: "Editorial" },
-];
+type Photographer = { id: string; name: string; email: string };
 
 type InvoiceItem = {
   id: number;
@@ -57,8 +52,14 @@ const SectionIcon = ({
   </div>
 );
 
-export function InvoiceCreateForm() {
+export function InvoiceCreateForm({
+  photographers,
+}: {
+  photographers: Photographer[];
+}) {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -67,6 +68,7 @@ export function InvoiceCreateForm() {
   const [eventTitle, setEventTitle] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [eventLocation, setEventLocation] = useState("");
+  const [eventType, setEventType] = useState("");
 
   const [selectedPhotographers, setSelectedPhotographers] = useState<string[]>(
     []
@@ -143,15 +145,56 @@ export function InvoiceCreateForm() {
   const tax = subtotal * (taxRate / 100);
   const total = subtotal + tax;
 
-  const selectedPhotographerObjects = mockPhotographers.filter((p) =>
+  const selectedPhotographerObjects = photographers.filter((p) =>
     selectedPhotographers.includes(p.id)
   );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    router.push("/admin/invoices/INV-2026-001");
-  };
+    setError(null);
 
+    const validItems = items.filter(
+      (i) => i.description.trim() !== "" && i.quantity > 0 && i.price >= 0
+    );
+    if (validItems.length === 0) {
+      setError("Add at least one valid line item.");
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const result = await createInvoice({
+          customer: {
+            name: customerName,
+            phone: customerPhone || undefined,
+            email: customerEmail || undefined,
+          },
+          event: {
+            title: eventTitle,
+            date: eventDate,
+            location: eventLocation,
+            eventType: eventType || undefined,
+          },
+          photographerIds: selectedPhotographers,
+          items: validItems.map((i) => ({
+            description: i.description,
+            quantity: i.quantity,
+            price: i.price,
+          })),
+          notes: notes || undefined,
+          taxRate,
+        });
+
+        if (result.ok) {
+          router.push(`/admin/invoices/${result.invoiceId}`);
+        }
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to create invoice"
+        );
+      }
+    });
+  };
 
   return (
     <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -185,7 +228,7 @@ export function InvoiceCreateForm() {
                 <Input
                   id="customer-phone"
                   type="tel"
-                  placeholder="+1 (555) 123-4567"
+                  placeholder="+880 1XXX XXXXXX"
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
                 />
@@ -198,7 +241,6 @@ export function InvoiceCreateForm() {
                   placeholder="customer@example.com"
                   value={customerEmail}
                   onChange={(e) => setCustomerEmail(e.target.value)}
-                  required
                 />
               </div>
             </div>
@@ -241,12 +283,22 @@ export function InvoiceCreateForm() {
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="event-type">Event Type</Label>
+                <Input
+                  id="event-type"
+                  placeholder="e.g., Wedding, Corporate, Portrait"
+                  value={eventType}
+                  onChange={(e) => setEventType(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="event-location">Location</Label>
                 <Input
                   id="event-location"
                   placeholder="e.g., Belmont Estate, Tarrytown NY"
                   value={eventLocation}
                   onChange={(e) => setEventLocation(e.target.value)}
+                  required
                 />
               </div>
             </div>
@@ -282,7 +334,9 @@ export function InvoiceCreateForm() {
                   <div className="flex flex-wrap gap-1.5 flex-1 min-h-[24px] items-center">
                     {selectedPhotographerObjects.length === 0 ? (
                       <span className="text-text-muted">
-                        Select photographer(s)…
+                        {photographers.length === 0
+                          ? "No photographers in database"
+                          : "Select photographer(s)…"}
                       </span>
                     ) : (
                       selectedPhotographerObjects.map((p) => (
@@ -314,9 +368,9 @@ export function InvoiceCreateForm() {
                   />
                 </button>
 
-                {photographerOpen && (
+                {photographerOpen && photographers.length > 0 && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-surface-raised border border-border rounded-md shadow-card-hover z-20 max-h-72 overflow-y-auto py-1 animate-fade-in opacity-0">
-                    {mockPhotographers.map((p) => {
+                    {photographers.map((p) => {
                       const isSelected = selectedPhotographers.includes(p.id);
                       return (
                         <button
@@ -348,7 +402,7 @@ export function InvoiceCreateForm() {
                               {p.name}
                             </div>
                             <div className="text-[11px] font-sans text-text-muted">
-                              {p.specialty}
+                              {p.email}
                             </div>
                           </div>
                         </button>
@@ -558,15 +612,30 @@ export function InvoiceCreateForm() {
 
           <Card className="border-border">
             <CardContent className="p-3 space-y-2">
-              <Button type="submit" className="w-full" size="lg">
-                <Send className="w-4 h-4" strokeWidth={2} />
-                Generate Invoice
+              {error && (
+                <div className="px-3 py-2 rounded-md bg-red-expense-subtle border border-red-expense/30 text-xs font-sans text-red-expense">
+                  {error}
+                </div>
+              )}
+              <Button
+                type="submit"
+                className="w-full"
+                size="lg"
+                disabled={isPending}
+              >
+                {isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2} />
+                ) : (
+                  <Send className="w-4 h-4" strokeWidth={2} />
+                )}
+                {isPending ? "Generating…" : "Generate Invoice"}
               </Button>
               <Button
                 type="button"
                 variant="secondary"
                 className="w-full"
                 size="lg"
+                disabled={isPending}
               >
                 <Save className="w-4 h-4" strokeWidth={2} />
                 Save as Draft
@@ -577,6 +646,7 @@ export function InvoiceCreateForm() {
                 className="w-full"
                 size="lg"
                 onClick={() => router.push("/admin")}
+                disabled={isPending}
               >
                 Cancel
               </Button>

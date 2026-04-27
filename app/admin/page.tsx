@@ -8,9 +8,6 @@ import {
   BarChart3,
   ArrowUpRight,
   ArrowDownRight,
-  Clock,
-  CalendarCheck,
-  UserCheck,
   Plus,
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
@@ -22,192 +19,93 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  getDashboardStats,
+  getRecentActivity,
+  getUpcomingEvents,
+} from "@/lib/data";
+import { formatBDT } from "@/lib/currency";
+import { formatDate, formatDateTime, formatDateShort } from "@/lib/constants";
 
-const stats = [
-  {
-    title: "Completed Events",
-    value: "142",
-    change: "+12%",
-    trend: "up",
-    icon: CheckCircle2,
-    sub: "vs last month",
-    color: "text-green-profit",
-    bgColor: "bg-green-profit-subtle",
-    borderColor: "border-green-profit/20",
-    iconColor: "text-green-profit",
-  },
-  {
-    title: "New Contracts",
-    value: "28",
-    change: "+4",
-    trend: "up",
-    icon: FileSignature,
-    sub: "this month",
-    color: "text-amber",
-    bgColor: "bg-amber-subtle",
-    borderColor: "border-amber/20",
-    iconColor: "text-amber",
-  },
-  {
-    title: "Total Income",
-    value: "৳94,320",
-    change: "+8.2%",
-    trend: "up",
-    icon: DollarSign,
-    sub: "vs last month",
-    color: "text-green-profit",
-    bgColor: "bg-green-profit-subtle",
-    borderColor: "border-green-profit/20",
-    iconColor: "text-green-profit",
-  },
-  {
-    title: "Total Expenses",
-    value: "৳31,480",
-    change: "-3.1%",
-    trend: "down",
-    icon: Receipt,
-    sub: "vs last month",
-    color: "text-red-expense",
-    bgColor: "bg-red-expense-subtle",
-    borderColor: "border-red-expense/20",
-    iconColor: "text-red-expense",
-  },
-  {
-    title: "Net Profit",
-    value: "৳62,840",
-    change: "+14.6%",
-    trend: "up",
-    icon: BarChart3,
-    sub: "vs last month",
-    color: "text-green-profit",
-    bgColor: "bg-green-profit-subtle",
-    borderColor: "border-green-profit/20",
-    iconColor: "text-green-profit",
-    featured: true,
-  },
-];
+export default async function AdminDashboard() {
+  const [stats, recentActivity, upcomingEvents] = await Promise.all([
+    getDashboardStats(),
+    getRecentActivity(7),
+    getUpcomingEvents(4),
+  ]);
 
-const recentActivity = [
-  {
-    id: "ACT-001",
-    invoiceId: "INV-2026-001",
-    type: "payment",
-    description: "Payment received",
-    client: "Helena & Marcus W.",
-    amount: "৳2,400",
-    date: "Today, 10:32 AM",
-    status: "completed",
-    icon: DollarSign,
-  },
-  {
-    id: "ACT-002",
-    invoiceId: "INV-2026-002",
-    type: "assignment",
-    description: "Photographer assigned",
-    client: "Sunrise Gala — Corporate",
-    amount: "James Okafor",
-    date: "Today, 9:15 AM",
-    status: "confirmed",
-    icon: UserCheck,
-  },
-  {
-    id: "ACT-003",
-    invoiceId: "INV-2026-003",
-    type: "event",
-    description: "Event completed",
-    client: "The Nguyen Wedding",
-    amount: "৳3,850",
-    date: "Yesterday, 6:00 PM",
-    status: "completed",
-    icon: CalendarCheck,
-  },
-  {
-    id: "ACT-004",
-    invoiceId: "INV-2026-004",
-    type: "contract",
-    description: "Contract signed",
-    client: "Bloom & Briar Florists",
-    amount: "৳1,200",
-    date: "Yesterday, 2:44 PM",
-    status: "pending",
-    icon: FileSignature,
-  },
-  {
-    id: "ACT-005",
-    invoiceId: "INV-2026-005",
-    type: "payment",
-    description: "Payment received",
-    client: "Corporate Headshots — TechVive",
-    amount: "৳4,100",
-    date: "Apr 24, 11:20 AM",
-    status: "completed",
-    icon: DollarSign,
-  },
-  {
-    id: "ACT-006",
-    invoiceId: "INV-2026-006",
-    type: "assignment",
-    description: "Photographer assigned",
-    client: "The Rosario Quinceañera",
-    amount: "Priya Mehta",
-    date: "Apr 23, 3:00 PM",
-    status: "confirmed",
-    icon: UserCheck,
-  },
-  {
-    id: "ACT-007",
-    invoiceId: "INV-2026-007",
-    type: "payment",
-    description: "Invoice overdue",
-    client: "Lakeside Retreat — Wilson",
-    amount: "৳1,750",
-    date: "Apr 22, 9:00 AM",
-    status: "overdue",
-    icon: Clock,
-  },
-];
+  const today = formatDate(new Date());
 
-const upcomingEvents = [
-  {
-    name: "The Park Wedding",
-    date: "May 3",
-    photographer: "James Okafor",
-    type: "Wedding",
-  },
-  {
-    name: "TechVive Annual Dinner",
-    date: "May 6",
-    photographer: "Priya Mehta",
-    type: "Corporate",
-  },
-  {
-    name: "Chen Family Portrait",
-    date: "May 9",
-    photographer: "Unassigned",
-    type: "Portrait",
-  },
-  {
-    name: "Morales Engagement",
-    date: "May 12",
-    photographer: "Sofia Reyes",
-    type: "Engagement",
-  },
-];
+  const formatPct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
+  const formatDelta = (n: number) => `${n >= 0 ? "+" : ""}${n}`;
 
-const statusConfig: Record<
-  string,
-  { label: string; variant: "success" | "pending" | "destructive" | "default" }
-> = {
-  completed: { label: "Completed", variant: "success" },
-  confirmed: { label: "Confirmed", variant: "default" },
-  pending: { label: "Pending", variant: "pending" },
-  overdue: { label: "Overdue", variant: "destructive" },
-};
+  const statCards = [
+    {
+      title: "Completed Events",
+      value: stats.completedEvents.value.toString(),
+      change: formatPct(stats.completedEvents.change),
+      trend: stats.completedEvents.change >= 0 ? "up" : "down",
+      icon: CheckCircle2,
+      sub: "vs last month",
+      color: "text-green-profit",
+      bgColor: "bg-green-profit-subtle",
+      borderColor: "border-green-profit/20",
+      iconColor: "text-green-profit",
+    },
+    {
+      title: "New Contracts",
+      value: stats.newContracts.value.toString(),
+      change: formatDelta(stats.newContracts.change),
+      trend: stats.newContracts.change >= 0 ? "up" : "down",
+      icon: FileSignature,
+      sub: "this month",
+      color: "text-amber",
+      bgColor: "bg-amber-subtle",
+      borderColor: "border-amber/20",
+      iconColor: "text-amber",
+    },
+    {
+      title: "Total Income",
+      value: formatBDT(stats.totalIncome.value),
+      change: formatPct(stats.totalIncome.change),
+      trend: stats.totalIncome.change >= 0 ? "up" : "down",
+      icon: DollarSign,
+      sub: "vs last month",
+      color: "text-green-profit",
+      bgColor: "bg-green-profit-subtle",
+      borderColor: "border-green-profit/20",
+      iconColor: "text-green-profit",
+    },
+    {
+      title: "Total Expenses",
+      value: formatBDT(stats.totalExpenses.value),
+      change: formatPct(stats.totalExpenses.change),
+      trend: stats.totalExpenses.change <= 0 ? "up" : "down",
+      icon: Receipt,
+      sub: "vs last month",
+      color: "text-red-expense",
+      bgColor: "bg-red-expense-subtle",
+      borderColor: "border-red-expense/20",
+      iconColor: "text-red-expense",
+    },
+    {
+      title: "Net Profit",
+      value: formatBDT(stats.netProfit.value),
+      change: formatPct(stats.netProfit.change),
+      trend: stats.netProfit.change >= 0 ? "up" : "down",
+      icon: BarChart3,
+      sub: "vs last month",
+      color: "text-green-profit",
+      bgColor: "bg-green-profit-subtle",
+      borderColor: "border-green-profit/20",
+      iconColor: "text-green-profit",
+      featured: true,
+    },
+  ];
 
-export default function AdminDashboard() {
   return (
     <div className="flex flex-col min-h-screen">
-      <Header title="Dashboard" subtitle="Sunday, April 26, 2026" />
+      <Header title="Dashboard" subtitle={today} />
 
       <div className="flex-1 p-6 space-y-6">
         <div className="opacity-0 animate-fade-in">
@@ -223,7 +121,7 @@ export default function AdminDashboard() {
             <div className="flex items-center gap-3">
               <div className="hidden lg:flex items-center gap-2 text-xs font-sans text-text-muted bg-surface-raised border border-border rounded-md px-3 py-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-profit animate-pulse" />
-                3 events this week
+                {upcomingEvents.length} upcoming events
               </div>
               <Link href="/admin/invoices/create">
                 <Button>
@@ -236,7 +134,7 @@ export default function AdminDashboard() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-          {stats.map((stat, i) => {
+          {statCards.map((stat, i) => {
             const Icon = stat.icon;
             const TrendIcon = stat.trend === "up" ? ArrowUpRight : ArrowDownRight;
             return (
@@ -263,12 +161,12 @@ export default function AdminDashboard() {
                 <CardContent>
                   <div className="flex items-end justify-between gap-2">
                     <span
-                      className={`font-serif text-2xl leading-none ${stat.featured ? "text-amber" : "text-text-primary"}`}
+                      className={`font-serif text-2xl leading-none ${stat.featured ? "text-amber" : "text-text-primary"} truncate`}
                     >
                       {stat.value}
                     </span>
                     <div
-                      className={`flex items-center gap-0.5 text-xs font-sans font-medium ${stat.color}`}
+                      className={`flex items-center gap-0.5 text-xs font-sans font-medium ${stat.color} shrink-0`}
                     >
                       <TrendIcon className="w-3 h-3" strokeWidth={2.5} />
                       {stat.change}
@@ -291,92 +189,115 @@ export default function AdminDashboard() {
                   <div>
                     <CardTitle>Recent Activity</CardTitle>
                     <p className="text-xs font-sans text-text-muted mt-1 normal-case tracking-normal">
-                      Latest payments, events, and assignments
+                      Latest payments — incoming and outgoing
                     </p>
                   </div>
-                  <button className="text-xs font-sans text-amber hover:text-amber-dim transition-colors">
+                  <Link
+                    href="/admin/finances"
+                    className="text-xs font-sans text-amber hover:text-amber-dim transition-colors"
+                  >
                     View all →
-                  </button>
+                  </Link>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-t border-b border-border-subtle">
-                        <th className="text-left text-[10px] font-sans font-medium text-text-muted uppercase tracking-widest px-6 py-3">
-                          Activity
-                        </th>
-                        <th className="text-left text-[10px] font-sans font-medium text-text-muted uppercase tracking-widest px-4 py-3 hidden md:table-cell">
-                          Client / Detail
-                        </th>
-                        <th className="text-left text-[10px] font-sans font-medium text-text-muted uppercase tracking-widest px-4 py-3">
-                          Amount
-                        </th>
-                        <th className="text-left text-[10px] font-sans font-medium text-text-muted uppercase tracking-widest px-4 py-3 hidden sm:table-cell">
-                          Date
-                        </th>
-                        <th className="text-left text-[10px] font-sans font-medium text-text-muted uppercase tracking-widest px-4 py-3">
-                          Status
-                        </th>
-                        <th className="w-10"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recentActivity.map((item) => {
-                        const Icon = item.icon;
-                        const status = statusConfig[item.status];
-                        return (
-                          <tr
-                            key={item.id}
-                            className="border-b border-border-subtle last:border-0 hover:bg-surface-hover/50 transition-colors group"
-                          >
-                            <td className="px-6 py-3.5">
-                              <div className="flex items-center gap-3">
-                                <div className="w-7 h-7 rounded-md bg-surface-raised border border-border flex items-center justify-center shrink-0">
-                                  <Icon
-                                    className="w-3.5 h-3.5 text-text-muted"
-                                    strokeWidth={1.75}
-                                  />
+                {recentActivity.length === 0 ? (
+                  <div className="px-6 py-12 text-center">
+                    <p className="text-sm font-sans text-text-muted">
+                      No payments yet. Run the seed script or record a payment to get started.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-t border-b border-border-subtle">
+                          <th className="text-left text-[10px] font-sans font-medium text-text-muted uppercase tracking-widest px-6 py-3">
+                            Activity
+                          </th>
+                          <th className="text-left text-[10px] font-sans font-medium text-text-muted uppercase tracking-widest px-4 py-3 hidden md:table-cell">
+                            Reference
+                          </th>
+                          <th className="text-left text-[10px] font-sans font-medium text-text-muted uppercase tracking-widest px-4 py-3">
+                            Amount
+                          </th>
+                          <th className="text-left text-[10px] font-sans font-medium text-text-muted uppercase tracking-widest px-4 py-3 hidden sm:table-cell">
+                            Date
+                          </th>
+                          <th className="text-left text-[10px] font-sans font-medium text-text-muted uppercase tracking-widest px-4 py-3">
+                            Type
+                          </th>
+                          <th className="w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recentActivity.map((item) => {
+                          const Icon = item.isIncome ? DollarSign : Receipt;
+                          return (
+                            <tr
+                              key={item.id}
+                              className="border-b border-border-subtle last:border-0 hover:bg-surface-hover/50 transition-colors group"
+                            >
+                              <td className="px-6 py-3.5">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-7 h-7 rounded-md bg-surface-raised border border-border flex items-center justify-center shrink-0">
+                                    <Icon
+                                      className="w-3.5 h-3.5 text-text-muted"
+                                      strokeWidth={1.75}
+                                    />
+                                  </div>
+                                  <span className="text-sm font-sans text-text-primary whitespace-nowrap">
+                                    {item.description}
+                                  </span>
                                 </div>
-                                <span className="text-sm font-sans text-text-primary whitespace-nowrap">
-                                  {item.description}
+                              </td>
+                              <td className="px-4 py-3.5 hidden md:table-cell">
+                                <span className="text-sm font-sans text-text-secondary truncate max-w-[180px] block">
+                                  {item.reference}
                                 </span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3.5 hidden md:table-cell">
-                              <span className="text-sm font-sans text-text-secondary truncate max-w-[180px] block">
-                                {item.client}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3.5">
-                              <span className="text-sm font-sans font-medium text-text-primary whitespace-nowrap">
-                                {item.amount}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3.5 hidden sm:table-cell">
-                              <span className="text-xs font-sans text-text-muted whitespace-nowrap">
-                                {item.date}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3.5">
-                              <Badge variant={status.variant}>{status.label}</Badge>
-                            </td>
-                            <td className="pr-4 py-3.5">
-                              <Link
-                                href={`/admin/invoices/${item.invoiceId}`}
-                                className="flex items-center justify-center w-7 h-7 rounded-md text-text-muted hover:text-amber hover:bg-amber-subtle transition-all opacity-50 group-hover:opacity-100"
-                                aria-label={`View invoice ${item.invoiceId}`}
-                              >
-                                <ArrowUpRight className="w-3.5 h-3.5" strokeWidth={2} />
-                              </Link>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <span
+                                  className={`text-sm font-sans font-medium whitespace-nowrap ${item.isIncome ? "text-green-profit" : "text-red-expense"}`}
+                                >
+                                  {item.isIncome ? "+" : "−"}
+                                  {formatBDT(item.amount)}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3.5 hidden sm:table-cell">
+                                <span className="text-xs font-sans text-text-muted whitespace-nowrap">
+                                  {formatDateTime(item.date)}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <Badge
+                                  variant={item.isIncome ? "success" : "secondary"}
+                                >
+                                  {item.isIncome ? "Income" : "Expense"}
+                                </Badge>
+                              </td>
+                              <td className="pr-4 py-3.5">
+                                {item.invoiceId ? (
+                                  <Link
+                                    href={`/admin/invoices/${item.invoiceId}`}
+                                    className="flex items-center justify-center w-7 h-7 rounded-md text-text-muted hover:text-amber hover:bg-amber-subtle transition-all opacity-50 group-hover:opacity-100"
+                                  >
+                                    <ArrowUpRight
+                                      className="w-3.5 h-3.5"
+                                      strokeWidth={2}
+                                    />
+                                  </Link>
+                                ) : (
+                                  <span className="block w-7 h-7" />
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -388,52 +309,64 @@ export default function AdminDashboard() {
                   <div>
                     <CardTitle>Upcoming Events</CardTitle>
                     <p className="text-xs font-sans text-text-muted mt-1 normal-case tracking-normal">
-                      Next 14 days
+                      Next on the calendar
                     </p>
                   </div>
-                  <button className="text-xs font-sans text-amber hover:text-amber-dim transition-colors">
+                  <Link
+                    href="/admin/events"
+                    className="text-xs font-sans text-amber hover:text-amber-dim transition-colors"
+                  >
                     View all →
-                  </button>
+                  </Link>
                 </div>
               </CardHeader>
               <CardContent className="p-0 pb-2">
-                <div className="space-y-1">
-                  {upcomingEvents.map((event, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-3 px-6 py-3 hover:bg-surface-hover/50 transition-colors group cursor-pointer"
-                    >
-                      <div className="w-9 h-9 rounded-md bg-surface-raised border border-border flex flex-col items-center justify-center shrink-0">
-                        <span className="text-[9px] font-sans text-text-muted uppercase leading-none">
-                          {event.date.split(" ")[0]}
-                        </span>
-                        <span className="text-sm font-serif text-text-primary leading-tight">
-                          {event.date.split(" ")[1]}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-sans font-medium text-text-primary truncate group-hover:text-amber transition-colors">
-                          {event.name}
-                        </p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <Badge
-                            variant={
-                              event.photographer === "Unassigned"
-                                ? "destructive"
-                                : "secondary"
-                            }
-                            className="text-[9px] px-1.5 py-0"
-                          >
-                            {event.type}
-                          </Badge>
-                          <span className="text-[10px] font-sans text-text-muted truncate">
-                            {event.photographer}
-                          </span>
+                {upcomingEvents.length === 0 ? (
+                  <div className="px-6 py-8 text-center">
+                    <p className="text-sm font-sans text-text-muted">
+                      No upcoming events.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {upcomingEvents.map((event) => {
+                      const { month, day } = formatDateShort(event.date);
+                      return (
+                        <div
+                          key={event.id}
+                          className="flex items-center gap-3 px-6 py-3 hover:bg-surface-hover/50 transition-colors group cursor-pointer"
+                        >
+                          <div className="w-9 h-9 rounded-md bg-surface-raised border border-border flex flex-col items-center justify-center shrink-0">
+                            <span className="text-[9px] font-sans text-text-muted uppercase leading-none">
+                              {month}
+                            </span>
+                            <span className="text-sm font-serif text-text-primary leading-tight">
+                              {day}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-sans font-medium text-text-primary truncate group-hover:text-amber transition-colors">
+                              {event.title}
+                            </p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <Badge
+                                variant={
+                                  event.photographer ? "secondary" : "destructive"
+                                }
+                                className="text-[9px] px-1.5 py-0"
+                              >
+                                {event.eventType ?? "Event"}
+                              </Badge>
+                              <span className="text-[10px] font-sans text-text-muted truncate">
+                                {event.photographer?.name ?? "Unassigned"}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -451,14 +384,24 @@ export default function AdminDashboard() {
                       Studio Performance
                     </p>
                     <p className="text-xs font-sans text-text-secondary mt-1 leading-relaxed">
-                      Revenue is up{" "}
-                      <span className="text-amber font-medium">14.6%</span>{" "}
-                      this month. April is on track to be your best month this
-                      year.
+                      {stats.netProfit.value > 0 ? (
+                        <>
+                          Net profit this month is{" "}
+                          <span className="text-amber font-medium">
+                            {formatBDT(stats.netProfit.value)}
+                          </span>{" "}
+                          on {formatBDT(stats.totalIncome.value)} of revenue.
+                        </>
+                      ) : (
+                        <>No revenue recorded for this month yet.</>
+                      )}
                     </p>
-                    <button className="mt-3 text-xs font-sans text-amber hover:text-amber-dim transition-colors font-medium">
+                    <Link
+                      href="/admin/finances"
+                      className="mt-3 inline-block text-xs font-sans text-amber hover:text-amber-dim transition-colors font-medium"
+                    >
                       View full report →
-                    </button>
+                    </Link>
                   </div>
                 </div>
               </CardContent>

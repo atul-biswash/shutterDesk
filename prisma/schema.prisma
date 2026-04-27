@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  OFFICE
+  PHOTOGRAPHER
+}
+
+enum EventStatus {
+  PENDING
+  COMPLETED
+  CANCELED
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PAID
+}
+
+enum PaymentType {
+  INCOME_CLIENT
+  EXPENSE_PHOTOGRAPHER
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignedEvents Event[]   @relation("PhotographerEvents")
+  payouts        Payment[] @relation("PhotographerPayouts")
+}
+
+model Event {
+  id             String      @id @default(cuid())
+  title          String
+  date           DateTime
+  time           String?
+  location       String
+  eventType      String?
+  clientName     String
+  clientPhone    String?
+  clientEmail    String?
+  status         EventStatus @default(PENDING)
+  photographerId String?
+  photographer   User?       @relation("PhotographerEvents", fields: [photographerId], references: [id], onDelete: SetNull)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  invoices Invoice[]
+  payments Payment[]
+
+  @@index([status])
+  @@index([date])
+  @@index([photographerId])
+}
+
+model Invoice {
+  id         String        @id @default(cuid())
+  eventId    String
+  event      Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  grandTotal Decimal       @db.Decimal(12, 2)
+  status     InvoiceStatus @default(UNPAID)
+  notes      String?
+  createdAt  DateTime      @default(now())
+
+  items    InvoiceItem[]
+  payments Payment[]
+
+  @@index([status])
+  @@index([eventId])
+}
+
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Int
+  price       Decimal @db.Decimal(12, 2)
+  total       Decimal @db.Decimal(12, 2)
+
+  @@index([invoiceId])
+}
+
+model Payment {
+  id        String      @id @default(cuid())
+  amount    Decimal     @db.Decimal(12, 2)
+  date      DateTime
+  method    String
+  type      PaymentType
+  reference String?
+  notes     String?
+
+  invoiceId String?
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  eventId String?
+  event   Event?  @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  photographerId String?
+  photographer   User?   @relation("PhotographerPayouts", fields: [photographerId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([type])
+  @@index([date])
+  @@index([invoiceId])
+  @@index([photographerId])
+}

@@ -6,7 +6,6 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   TrendingUp,
-  TrendingDown,
   Wallet,
   Receipt,
   ArrowUpRight,
@@ -31,10 +30,40 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { clientPayments, photographerPayments, photographers } from "@/lib/mockData";
 import { formatBDTWithDecimals as formatCurrency } from "@/lib/currency";
+import { getInitials, formatDate } from "@/lib/constants";
 import { RecordClientPaymentDialog } from "./RecordClientPaymentDialog";
 import { PayPhotographerDialog } from "./PayPhotographerDialog";
+
+type ClientPayment = {
+  id: string;
+  date: Date;
+  client: string;
+  invoiceId: string | null;
+  amount: number;
+  method: string;
+  reference: string;
+};
+
+type PhotographerPayment = {
+  id: string;
+  date: Date;
+  photographerName: string;
+  photographerId: string | null;
+  eventTitle: string;
+  eventId: string | null;
+  amount: number;
+  method: string;
+};
+
+type OpenInvoice = {
+  id: string;
+  client: string;
+  amount: number;
+  status: string;
+};
+
+type Photographer = { id: string; name: string; email: string };
 
 const methodIcon = (method: string) => {
   if (method === "Bank Transfer") return Banknote;
@@ -53,14 +82,30 @@ const methodBadge = (method: string) => {
   );
 };
 
-export function FinancesView() {
+export function FinancesView({
+  clientPayments,
+  photographerPayments,
+  openInvoices,
+  photographers,
+}: {
+  clientPayments: ClientPayment[];
+  photographerPayments: PhotographerPayment[];
+  openInvoices: OpenInvoice[];
+  photographers: Photographer[];
+}) {
   const [incomeSearch, setIncomeSearch] = useState("");
   const [expenseSearch, setExpenseSearch] = useState("");
 
   const totalIncome = clientPayments.reduce((sum, p) => sum + p.amount, 0);
-  const totalExpenses = photographerPayments.reduce((sum, p) => sum + p.amount, 0);
+  const totalExpenses = photographerPayments.reduce(
+    (sum, p) => sum + p.amount,
+    0
+  );
   const net = totalIncome - totalExpenses;
-  const margin = ((net / totalIncome) * 100).toFixed(1);
+  const margin =
+    totalIncome > 0 ? ((net / totalIncome) * 100).toFixed(1) : "0.0";
+  const avgIncome =
+    clientPayments.length > 0 ? totalIncome / clientPayments.length : 0;
 
   const filteredIncome = useMemo(
     () =>
@@ -68,10 +113,12 @@ export function FinancesView() {
         (p) =>
           incomeSearch === "" ||
           p.client.toLowerCase().includes(incomeSearch.toLowerCase()) ||
-          p.invoiceId.toLowerCase().includes(incomeSearch.toLowerCase()) ||
+          (p.invoiceId ?? "")
+            .toLowerCase()
+            .includes(incomeSearch.toLowerCase()) ||
           p.method.toLowerCase().includes(incomeSearch.toLowerCase())
       ),
-    [incomeSearch]
+    [clientPayments, incomeSearch]
   );
 
   const filteredExpenses = useMemo(
@@ -79,10 +126,12 @@ export function FinancesView() {
       photographerPayments.filter(
         (p) =>
           expenseSearch === "" ||
-          p.photographer.toLowerCase().includes(expenseSearch.toLowerCase()) ||
-          p.event.toLowerCase().includes(expenseSearch.toLowerCase())
+          p.photographerName
+            .toLowerCase()
+            .includes(expenseSearch.toLowerCase()) ||
+          p.eventTitle.toLowerCase().includes(expenseSearch.toLowerCase())
       ),
-    [expenseSearch]
+    [photographerPayments, expenseSearch]
   );
 
   return (
@@ -174,7 +223,7 @@ export function FinancesView() {
           </CardHeader>
           <CardContent>
             <p className="font-serif text-2xl text-text-primary leading-none">
-              {formatCurrency(totalIncome / clientPayments.length)}
+              {formatCurrency(avgIncome)}
             </p>
             <p className="text-[11px] font-sans text-text-muted mt-1.5">
               Per client payment
@@ -202,7 +251,7 @@ export function FinancesView() {
                 <div>
                   <CardTitle>Incoming Payments</CardTitle>
                   <p className="text-xs font-sans text-text-muted mt-1 normal-case tracking-normal">
-                    All client payments received this month
+                    All client payments received
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -215,7 +264,7 @@ export function FinancesView() {
                       className="pl-9 w-56 h-9"
                     />
                   </div>
-                  <RecordClientPaymentDialog />
+                  <RecordClientPaymentDialog invoices={openInvoices} />
                 </div>
               </div>
             </CardHeader>
@@ -236,15 +285,20 @@ export function FinancesView() {
                 <TableBody>
                   {filteredIncome.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="py-12 text-center text-sm text-text-muted">
-                        No payments match your search.
+                      <TableCell
+                        colSpan={7}
+                        className="py-12 text-center text-sm text-text-muted"
+                      >
+                        {clientPayments.length === 0
+                          ? "No payments recorded yet."
+                          : "No payments match your search."}
                       </TableCell>
                     </TableRow>
                   ) : (
                     filteredIncome.map((payment) => (
                       <TableRow key={payment.id} className="group">
                         <TableCell className="pl-6 text-text-secondary whitespace-nowrap">
-                          {payment.date}
+                          {formatDate(payment.date)}
                         </TableCell>
                         <TableCell>
                           <span className="font-medium text-text-primary whitespace-nowrap">
@@ -253,7 +307,9 @@ export function FinancesView() {
                         </TableCell>
                         <TableCell>
                           <span className="text-amber font-mono text-xs whitespace-nowrap">
-                            {payment.invoiceId}
+                            {payment.invoiceId
+                              ? payment.invoiceId.slice(0, 12)
+                              : "—"}
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
@@ -269,7 +325,10 @@ export function FinancesView() {
                         </TableCell>
                         <TableCell className="pr-4">
                           <button className="w-7 h-7 rounded-md text-text-muted hover:text-amber hover:bg-amber-subtle transition-all opacity-50 group-hover:opacity-100 flex items-center justify-center">
-                            <ArrowUpRight className="w-3.5 h-3.5" strokeWidth={2} />
+                            <ArrowUpRight
+                              className="w-3.5 h-3.5"
+                              strokeWidth={2}
+                            />
                           </button>
                         </TableCell>
                       </TableRow>
@@ -301,7 +360,7 @@ export function FinancesView() {
                       className="pl-9 w-56 h-9"
                     />
                   </div>
-                  <PayPhotographerDialog />
+                  <PayPhotographerDialog photographers={photographers} />
                 </div>
               </div>
             </CardHeader>
@@ -321,56 +380,61 @@ export function FinancesView() {
                 <TableBody>
                   {filteredExpenses.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="py-12 text-center text-sm text-text-muted">
-                        No payouts match your search.
+                      <TableCell
+                        colSpan={6}
+                        className="py-12 text-center text-sm text-text-muted"
+                      >
+                        {photographerPayments.length === 0
+                          ? "No payouts recorded yet."
+                          : "No payouts match your search."}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredExpenses.map((payment) => {
-                      const photographer = photographers.find(
-                        (p) => p.name === payment.photographer
-                      );
-                      return (
-                        <TableRow key={payment.id} className="group">
-                          <TableCell className="pl-6 text-text-secondary whitespace-nowrap">
-                            {payment.date}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-full bg-amber/20 border border-amber/30 flex items-center justify-center shrink-0">
-                                <span className="text-[9px] font-semibold font-sans text-amber">
-                                  {photographer?.initials || "??"}
-                                </span>
-                              </div>
-                              <span className="font-medium text-text-primary whitespace-nowrap">
-                                {payment.photographer}
+                    filteredExpenses.map((payment) => (
+                      <TableRow key={payment.id} className="group">
+                        <TableCell className="pl-6 text-text-secondary whitespace-nowrap">
+                          {formatDate(payment.date)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-amber/20 border border-amber/30 flex items-center justify-center shrink-0">
+                              <span className="text-[9px] font-semibold font-sans text-amber">
+                                {getInitials(payment.photographerName)}
                               </span>
                             </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span className="text-text-primary whitespace-nowrap">
-                                {payment.event}
-                              </span>
-                              <span className="text-[10px] font-mono text-text-muted">
-                                {payment.eventId}
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span className="font-medium text-red-expense whitespace-nowrap">
-                              -{formatCurrency(payment.amount)}
+                            <span className="font-medium text-text-primary whitespace-nowrap">
+                              {payment.photographerName}
                             </span>
-                          </TableCell>
-                          <TableCell>{methodBadge(payment.method)}</TableCell>
-                          <TableCell className="pr-4">
-                            <button className="w-7 h-7 rounded-md text-text-muted hover:text-amber hover:bg-amber-subtle transition-all opacity-50 group-hover:opacity-100 flex items-center justify-center">
-                              <ArrowUpRight className="w-3.5 h-3.5" strokeWidth={2} />
-                            </button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-text-primary whitespace-nowrap">
+                              {payment.eventTitle}
+                            </span>
+                            {payment.eventId && (
+                              <span className="text-[10px] font-mono text-text-muted">
+                                {payment.eventId.slice(0, 12)}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span className="font-medium text-red-expense whitespace-nowrap">
+                            −{formatCurrency(payment.amount)}
+                          </span>
+                        </TableCell>
+                        <TableCell>{methodBadge(payment.method)}</TableCell>
+                        <TableCell className="pr-4">
+                          <button className="w-7 h-7 rounded-md text-text-muted hover:text-amber hover:bg-amber-subtle transition-all opacity-50 group-hover:opacity-100 flex items-center justify-center">
+                            <ArrowUpRight
+                              className="w-3.5 h-3.5"
+                              strokeWidth={2}
+                            />
+                          </button>
+                        </TableCell>
+                      </TableRow>
+                    ))
                   )}
                 </TableBody>
               </Table>

@@ -10,8 +10,8 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
-  Loader2,
 } from "lucide-react";
+import { EventStatus } from "@prisma/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -31,76 +31,85 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { allEvents, photographers, type EventStatus } from "@/lib/mockData";
 import { formatBDT as formatCurrency } from "@/lib/currency";
+import { getInitials, formatDate } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import type { EventListItem } from "@/lib/data";
+
+type Photographer = { id: string; name: string; email: string };
 
 const statusBadge = (status: EventStatus) => {
-  if (status === "Completed")
+  if (status === "COMPLETED")
     return (
       <Badge variant="success" className="gap-1">
         <CheckCircle2 className="w-2.5 h-2.5" strokeWidth={2.5} />
         Completed
       </Badge>
     );
-  if (status === "Pending")
+  if (status === "PENDING")
     return (
       <Badge variant="pending" className="gap-1">
         <Clock className="w-2.5 h-2.5" strokeWidth={2.5} />
         Pending
       </Badge>
     );
-  if (status === "Canceled")
-    return (
-      <Badge variant="destructive" className="gap-1">
-        <XCircle className="w-2.5 h-2.5" strokeWidth={2.5} />
-        Canceled
-      </Badge>
-    );
   return (
-    <Badge variant="secondary" className="gap-1">
-      <Loader2 className="w-2.5 h-2.5" strokeWidth={2.5} />
-      In Progress
+    <Badge variant="destructive" className="gap-1">
+      <XCircle className="w-2.5 h-2.5" strokeWidth={2.5} />
+      Canceled
     </Badge>
   );
 };
 
 const statusOptions: ("all" | EventStatus)[] = [
   "all",
-  "Pending",
-  "Completed",
-  "Canceled",
+  "PENDING",
+  "COMPLETED",
+  "CANCELED",
 ];
 
-export function EventsTable() {
+const statusLabel = (s: "all" | EventStatus) => {
+  if (s === "all") return "All Statuses";
+  return s.charAt(0) + s.slice(1).toLowerCase();
+};
+
+export function EventsTable({
+  events,
+  photographers,
+}: {
+  events: EventListItem[];
+  photographers: Photographer[];
+}) {
   const [searchQuery, setSearchQuery] = useState("");
   const [photographerFilter, setPhotographerFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | EventStatus>("all");
 
   const filteredEvents = useMemo(() => {
-    return allEvents.filter((event) => {
+    return events.filter((event) => {
       const matchesSearch =
         searchQuery === "" ||
-        event.photographer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        event.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        event.client.toLowerCase().includes(searchQuery.toLowerCase());
+        (event.photographer?.name ?? "")
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase()) ||
+        event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        event.clientName.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesPhotographer =
         photographerFilter === "all" ||
-        event.photographer === photographerFilter;
+        event.photographer?.id === photographerFilter;
 
       const matchesStatus =
         statusFilter === "all" || event.status === statusFilter;
 
       return matchesSearch && matchesPhotographer && matchesStatus;
     });
-  }, [searchQuery, photographerFilter, statusFilter]);
+  }, [events, searchQuery, photographerFilter, statusFilter]);
 
   const stats = useMemo(() => {
     const total = filteredEvents.length;
-    const completed = filteredEvents.filter((e) => e.status === "Completed").length;
-    const pending = filteredEvents.filter((e) => e.status === "Pending").length;
-    const canceled = filteredEvents.filter((e) => e.status === "Canceled").length;
+    const completed = filteredEvents.filter((e) => e.status === "COMPLETED").length;
+    const pending = filteredEvents.filter((e) => e.status === "PENDING").length;
+    const canceled = filteredEvents.filter((e) => e.status === "CANCELED").length;
     return { total, completed, pending, canceled };
   }, [filteredEvents]);
 
@@ -187,7 +196,7 @@ export function EventsTable() {
                 <SelectContent>
                   <SelectItem value="all">All Photographers</SelectItem>
                   {photographers.map((p) => (
-                    <SelectItem key={p.id} value={p.name}>
+                    <SelectItem key={p.id} value={p.id}>
                       {p.name}
                     </SelectItem>
                   ))}
@@ -196,7 +205,9 @@ export function EventsTable() {
 
               <Select
                 value={statusFilter}
-                onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}
+                onValueChange={(v) =>
+                  setStatusFilter(v as typeof statusFilter)
+                }
               >
                 <SelectTrigger className="w-[140px] h-9 text-xs">
                   <SelectValue placeholder="All statuses" />
@@ -204,7 +215,7 @@ export function EventsTable() {
                 <SelectContent>
                   {statusOptions.map((s) => (
                     <SelectItem key={s} value={s}>
-                      {s === "all" ? "All Statuses" : s}
+                      {statusLabel(s)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -232,7 +243,7 @@ export function EventsTable() {
               </span>
               <span>of</span>
               <span className="text-text-secondary font-medium">
-                {allEvents.length}
+                {events.length}
               </span>
               <span>events</span>
             </div>
@@ -259,80 +270,88 @@ export function EventsTable() {
                   <TableCell colSpan={8} className="py-12">
                     <div className="flex flex-col items-center gap-2 text-center">
                       <div className="w-10 h-10 rounded-md bg-surface-raised border border-border flex items-center justify-center">
-                        <Calendar className="w-5 h-5 text-text-muted" strokeWidth={1.5} />
+                        <Calendar
+                          className="w-5 h-5 text-text-muted"
+                          strokeWidth={1.5}
+                        />
                       </div>
                       <p className="text-sm font-sans text-text-secondary">
-                        No events match your filters
+                        {events.length === 0
+                          ? "No events yet. Run the seed script or create one."
+                          : "No events match your filters"}
                       </p>
-                      <button
-                        onClick={clearFilters}
-                        className="text-xs font-sans text-amber hover:text-amber-dim transition-colors"
-                      >
-                        Clear filters
-                      </button>
+                      {hasActiveFilters && (
+                        <button
+                          onClick={clearFilters}
+                          className="text-xs font-sans text-amber hover:text-amber-dim transition-colors"
+                        >
+                          Clear filters
+                        </button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredEvents.map((event) => {
-                  const photographer = photographers.find(
-                    (p) => p.name === event.photographer
-                  );
-                  return (
-                    <TableRow key={event.id} className="group">
-                      <TableCell className="pl-6">
-                        <div className="flex items-center gap-3">
-                          <div className="w-7 h-7 rounded-md bg-amber/10 border border-amber/20 flex items-center justify-center shrink-0">
-                            <Calendar
-                              className="w-3.5 h-3.5 text-amber"
-                              strokeWidth={1.75}
-                            />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-medium whitespace-nowrap">
-                              {event.name}
-                            </p>
-                            <p className="text-[11px] font-sans text-text-muted mt-0.5">
-                              {event.id}
-                            </p>
-                          </div>
+                filteredEvents.map((event) => (
+                  <TableRow key={event.id} className="group">
+                    <TableCell className="pl-6">
+                      <div className="flex items-center gap-3">
+                        <div className="w-7 h-7 rounded-md bg-amber/10 border border-amber/20 flex items-center justify-center shrink-0">
+                          <Calendar
+                            className="w-3.5 h-3.5 text-amber"
+                            strokeWidth={1.75}
+                          />
                         </div>
-                      </TableCell>
-                      <TableCell className="text-text-secondary whitespace-nowrap">
-                        {event.date}
-                      </TableCell>
-                      <TableCell>
+                        <div className="min-w-0">
+                          <p className="font-medium whitespace-nowrap">
+                            {event.title}
+                          </p>
+                          <p className="text-[11px] font-sans text-text-muted mt-0.5 font-mono">
+                            {event.id.slice(0, 12)}
+                          </p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-text-secondary whitespace-nowrap">
+                      {formatDate(event.date)}
+                    </TableCell>
+                    <TableCell>
+                      {event.photographer ? (
                         <div className="flex items-center gap-2">
                           <div className="w-6 h-6 rounded-full bg-amber/20 border border-amber/30 flex items-center justify-center shrink-0">
                             <span className="text-[9px] font-semibold font-sans text-amber">
-                              {photographer?.initials || "??"}
+                              {getInitials(event.photographer.name)}
                             </span>
                           </div>
                           <span className="text-text-secondary whitespace-nowrap">
-                            {event.photographer}
+                            {event.photographer.name}
                           </span>
                         </div>
-                      </TableCell>
-                      <TableCell className="text-text-secondary whitespace-nowrap max-w-[180px] truncate">
-                        {event.client}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="text-[10px]">
-                          {event.type}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-medium text-text-primary whitespace-nowrap">
-                        {formatCurrency(event.amount)}
-                      </TableCell>
-                      <TableCell>{statusBadge(event.status)}</TableCell>
-                      <TableCell className="pr-4">
-                        <button className="w-7 h-7 rounded-md text-text-muted hover:text-amber hover:bg-amber-subtle transition-all opacity-50 group-hover:opacity-100 flex items-center justify-center">
-                          <ArrowUpRight className="w-3.5 h-3.5" strokeWidth={2} />
-                        </button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
+                      ) : (
+                        <span className="text-text-muted italic text-xs">
+                          Unassigned
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-text-secondary whitespace-nowrap max-w-[180px] truncate">
+                      {event.clientName}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" className="text-[10px]">
+                        {event.eventType ?? "Event"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-medium text-text-primary whitespace-nowrap">
+                      {formatCurrency(event.amount)}
+                    </TableCell>
+                    <TableCell>{statusBadge(event.status)}</TableCell>
+                    <TableCell className="pr-4">
+                      <button className="w-7 h-7 rounded-md text-text-muted hover:text-amber hover:bg-amber-subtle transition-all opacity-50 group-hover:opacity-100 flex items-center justify-center">
+                        <ArrowUpRight className="w-3.5 h-3.5" strokeWidth={2} />
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                ))
               )}
             </TableBody>
           </Table>

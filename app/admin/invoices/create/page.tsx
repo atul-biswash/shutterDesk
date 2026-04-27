@@ -2,8 +2,11 @@ import Link from "next/link";
 import { ArrowLeft, FileText } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { InvoiceCreateForm } from "./InvoiceCreateForm";
+import { getAllPhotographers } from "@/lib/data";
 
-export default function CreateInvoicePage() {
+export default async function CreateInvoicePage() {
+  const photographers = await getAllPhotographers();
+
   return (
     <div className="flex flex-col min-h-screen">
       <Header
@@ -23,11 +26,11 @@ export default function CreateInvoicePage() {
 
           <div className="hidden md:flex items-center gap-2 text-[11px] font-sans text-text-muted bg-surface-raised border border-border rounded-md px-3 py-1.5">
             <FileText className="w-3 h-3 text-amber" strokeWidth={2} />
-            Draft Invoice · INV-2026-NEW
+            Draft Invoice
           </div>
         </div>
 
-        <InvoiceCreateForm />
+        <InvoiceCreateForm photographers={photographers} />
       </div>
     </div>
   );
