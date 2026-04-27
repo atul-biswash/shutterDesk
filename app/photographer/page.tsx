@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import {
   Wallet,
   Clock,
@@ -17,8 +18,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { PhotographerEventsGrid } from "./PhotographerEventsGrid";
 import { PhotographerPastTable } from "./PhotographerPastTable";
+import { auth } from "@/auth";
 import {
   getAllPhotographers,
   getEventsForPhotographer,
@@ -28,42 +31,62 @@ import { formatBDT } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
 export default async function PhotographerDashboard() {
-  const photographers = await getAllPhotographers();
+  const session = await auth();
+  if (!session) redirect("/auth/signin");
 
-  if (photographers.length === 0) {
-    return (
-      <div className="flex flex-col min-h-screen">
-        <Header
-          title="My Dashboard"
-          subtitle="Photographer workspace"
-        />
-        <div className="flex-1 p-6 flex items-center justify-center">
-          <Card className="max-w-md border-border">
-            <CardContent className="p-10 text-center space-y-3">
-              <div className="w-12 h-12 rounded-xl bg-surface-raised border border-border flex items-center justify-center mx-auto">
-                <Camera
-                  className="w-5 h-5 text-text-muted"
-                  strokeWidth={1.5}
-                />
-              </div>
-              <p className="font-serif text-xl text-text-primary">
-                No photographers yet
-              </p>
-              <p className="text-sm font-sans text-text-secondary leading-relaxed">
-                Run <span className="font-mono text-amber">npm run db:seed</span> to populate the database with demo photographers.
-              </p>
-            </CardContent>
-          </Card>
+  let photographerId: string;
+  let photographerName: string;
+  let photographerEmail: string | null;
+  let isPreviewMode = false;
+
+  if (session.user.role === "PHOTOGRAPHER") {
+    photographerId = session.user.id;
+    photographerName = session.user.name ?? "Photographer";
+    photographerEmail = session.user.email ?? null;
+  } else {
+    const photographers = await getAllPhotographers();
+    if (photographers.length === 0) {
+      return (
+        <div className="flex flex-col min-h-screen">
+          <Header
+            title="My Dashboard"
+            subtitle="Photographer workspace"
+          />
+          <div className="flex-1 p-6 flex items-center justify-center">
+            <Card className="max-w-md border-border">
+              <CardContent className="p-10 text-center space-y-3">
+                <div className="w-12 h-12 rounded-xl bg-surface-raised border border-border flex items-center justify-center mx-auto">
+                  <Camera
+                    className="w-5 h-5 text-text-muted"
+                    strokeWidth={1.5}
+                  />
+                </div>
+                <p className="font-serif text-xl text-text-primary">
+                  No photographers yet
+                </p>
+                <p className="text-sm font-sans text-text-secondary leading-relaxed">
+                  Run{" "}
+                  <span className="font-mono text-amber">
+                    npm run db:seed
+                  </span>{" "}
+                  to populate the database with demo photographers.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
         </div>
-      </div>
-    );
+      );
+    }
+    const first = photographers[0];
+    photographerId = first.id;
+    photographerName = first.name ?? "Photographer";
+    photographerEmail = first.email;
+    isPreviewMode = true;
   }
 
-  const currentPhotographer = photographers[0];
-
   const [{ upcoming, past }, earnings] = await Promise.all([
-    getEventsForPhotographer(currentPhotographer.id),
-    getPhotographerEarnings(currentPhotographer.id),
+    getEventsForPhotographer(photographerId),
+    getPhotographerEarnings(photographerId),
   ]);
 
   const stats = [
@@ -113,13 +136,29 @@ export default async function PhotographerDashboard() {
     year: "numeric",
   }).format(new Date());
 
-  const firstName = currentPhotographer.name.split(" ")[0];
+  const firstName = photographerName.split(" ")[0];
 
   return (
     <div className="flex flex-col min-h-screen">
       <Header title="My Dashboard" subtitle={today} />
 
       <div className="flex-1 p-6 space-y-6">
+        {isPreviewMode && (
+          <div className="opacity-0 animate-fade-in">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-subtle border border-amber/30">
+              <Sparkles
+                className="w-3.5 h-3.5 text-amber shrink-0"
+                strokeWidth={2}
+              />
+              <p className="text-xs font-sans text-amber">
+                Preview mode — viewing{" "}
+                <span className="font-medium">{photographerName}</span>&apos;s
+                workspace as {session.user.role.toLowerCase()}.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="opacity-0 animate-fade-in">
           <div className="flex items-start lg:items-center justify-between gap-4 flex-col lg:flex-row">
             <div>
@@ -140,7 +179,7 @@ export default async function PhotographerDashboard() {
             </div>
             <div className="flex items-center gap-2 text-xs font-sans text-text-muted bg-surface-raised border border-border rounded-md px-3 py-2">
               <Camera className="w-3.5 h-3.5 text-amber" strokeWidth={1.75} />
-              <span>{currentPhotographer.email}</span>
+              <span>{photographerEmail}</span>
             </div>
           </div>
         </div>
@@ -203,16 +242,22 @@ export default async function PhotographerDashboard() {
                 <TabsTrigger value="upcoming">
                   <CalendarDays className="w-4 h-4" />
                   Upcoming Events
-                  <span className="ml-1 px-1.5 py-0.5 rounded-sm bg-text-inverse/10 text-[10px] font-semibold data-[state=inactive]:bg-surface-hover">
+                  <Badge
+                    variant="secondary"
+                    className="ml-1 text-[9px] px-1 py-0"
+                  >
                     {upcoming.length}
-                  </span>
+                  </Badge>
                 </TabsTrigger>
                 <TabsTrigger value="past">
                   <History className="w-4 h-4" />
                   Past Events
-                  <span className="ml-1 px-1.5 py-0.5 rounded-sm bg-text-inverse/10 text-[10px] font-semibold data-[state=inactive]:bg-surface-hover">
+                  <Badge
+                    variant="secondary"
+                    className="ml-1 text-[9px] px-1 py-0"
+                  >
                     {past.length}
-                  </span>
+                  </Badge>
                 </TabsTrigger>
               </TabsList>
               <p className="text-xs font-sans text-text-muted hidden sm:flex items-center gap-1.5">
@@ -251,7 +296,8 @@ export default async function PhotographerDashboard() {
                   {upcoming.length > 0 ? (
                     <>
                       With {upcoming.length} confirmed shoot
-                      {upcoming.length === 1 ? "" : "s"} coming up, your year-to-date earnings of{" "}
+                      {upcoming.length === 1 ? "" : "s"} coming up, your
+                      year-to-date earnings of{" "}
                       <span className="text-amber font-medium">
                         {formatBDT(earnings.yearToDate)}
                       </span>{" "}
@@ -259,7 +305,8 @@ export default async function PhotographerDashboard() {
                     </>
                   ) : (
                     <>
-                      No upcoming events scheduled. Check back when admin assigns new shoots.
+                      No upcoming events scheduled. Check back when admin assigns
+                      new shoots.
                     </>
                   )}
                 </p>

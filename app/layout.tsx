@@ -1,26 +1,27 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { auth } from "@/auth";
+import { SessionProvider } from "@/components/providers/SessionProvider";
+import { Shell } from "@/components/layout/Shell";
 
 export const metadata: Metadata = {
   title: "ShutterDesk — Studio Management",
   description: "Photography studio management platform",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const session = await auth();
+
   return (
     <html lang="en">
       <body>
-        <div className="flex min-h-screen bg-background">
-          <Sidebar />
-          <main className="flex-1 ml-60 print:ml-0 min-h-screen flex flex-col">
-            {children}
-          </main>
-        </div>
+        <SessionProvider session={session}>
+          <Shell>{children}</Shell>
+        </SessionProvider>
       </body>
     </html>
   );

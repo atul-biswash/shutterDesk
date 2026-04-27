@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
 import {
   LayoutDashboard,
   Calendar,
@@ -13,9 +14,11 @@ import {
   ChevronRight,
   Aperture,
   ArrowLeftRight,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
+import { getInitials } from "@/lib/constants";
 
 type NavItem = {
   label: string;
@@ -27,7 +30,6 @@ type NavItem = {
 type RoleConfig = {
   label: string;
   description: string;
-  user: { name: string; email: string; initials: string };
   nav: NavItem[];
 };
 
@@ -35,7 +37,6 @@ const roleConfigs: Record<"admin" | "photographer" | "office", RoleConfig> = {
   admin: {
     label: "Admin View",
     description: "Studio Manager",
-    user: { name: "Admin User", email: "admin@shutterdesk.com", initials: "AD" },
     nav: [
       { label: "Dashboard", href: "/admin", icon: LayoutDashboard, matchExact: true },
       { label: "Events", href: "/admin/events", icon: Calendar },
@@ -47,7 +48,6 @@ const roleConfigs: Record<"admin" | "photographer" | "office", RoleConfig> = {
   photographer: {
     label: "Photographer View",
     description: "My Workspace",
-    user: { name: "James Okafor", email: "james@shutterdesk.com", initials: "JO" },
     nav: [
       { label: "Dashboard", href: "/photographer", icon: LayoutDashboard, matchExact: true },
       { label: "My Schedule", href: "/photographer/schedule", icon: Calendar },
@@ -57,7 +57,6 @@ const roleConfigs: Record<"admin" | "photographer" | "office", RoleConfig> = {
   office: {
     label: "Office View",
     description: "Office Staff",
-    user: { name: "Office Staff", email: "office@shutterdesk.com", initials: "OS" },
     nav: [
       { label: "Dashboard", href: "/office", icon: LayoutDashboard, matchExact: true },
       { label: "Bookings", href: "/office/bookings", icon: Calendar },
@@ -68,12 +67,12 @@ const roleConfigs: Record<"admin" | "photographer" | "office", RoleConfig> = {
 };
 
 const portalLinks = [
-  { label: "Admin Portal", href: "/admin", role: "admin", scope: "/admin" },
-  { label: "Office Portal", href: "/office", role: "office", scope: "/office" },
-  { label: "Photographer Portal", href: "/photographer", role: "photographer", scope: "/photographer" },
+  { label: "Admin Portal", href: "/admin", role: "admin" as const, scope: "/admin" },
+  { label: "Office Portal", href: "/office", role: "office" as const, scope: "/office" },
+  { label: "Photographer Portal", href: "/photographer", role: "photographer" as const, scope: "/photographer" },
 ];
 
-function detectRole(pathname: string): keyof typeof roleConfigs {
+function detectPortal(pathname: string): keyof typeof roleConfigs {
   if (pathname.startsWith("/photographer")) return "photographer";
   if (pathname.startsWith("/office")) return "office";
   return "admin";
@@ -81,12 +80,24 @@ function detectRole(pathname: string): keyof typeof roleConfigs {
 
 export function Sidebar() {
   const pathname = usePathname();
-  const currentRole = detectRole(pathname);
-  const config = roleConfigs[currentRole];
+  const { data: session } = useSession();
+
+  const currentPortal = detectPortal(pathname);
+  const config = roleConfigs[currentPortal];
+
+  const userRole = session?.user?.role;
+  const userName = session?.user?.name || session?.user?.email?.split("@")[0] || "User";
+  const userEmail = session?.user?.email || "";
+  const userInitials = getInitials(userName);
+  const canSwitchPortals = userRole === "ADMIN" || userRole === "OFFICE";
 
   const isNavActive = (item: NavItem) => {
     if (item.matchExact) return pathname === item.href;
     return pathname === item.href || pathname.startsWith(item.href + "/");
+  };
+
+  const handleSignOut = () => {
+    signOut({ callbackUrl: "/auth/signin", redirect: true });
   };
 
   return (
@@ -137,69 +148,88 @@ export function Sidebar() {
               <Icon
                 className={cn(
                   "w-4 h-4 shrink-0 transition-colors",
-                  isActive ? "text-amber" : "text-text-muted group-hover:text-text-secondary"
+                  isActive
+                    ? "text-amber"
+                    : "text-text-muted group-hover:text-text-secondary"
                 )}
                 strokeWidth={1.75}
               />
               <span className="flex-1">{item.label}</span>
               {isActive && (
-                <ChevronRight className="w-3 h-3 text-amber/60" strokeWidth={2} />
+                <ChevronRight
+                  className="w-3 h-3 text-amber/60"
+                  strokeWidth={2}
+                />
               )}
             </Link>
           );
         })}
       </nav>
 
-      <Separator />
-
-      <div className="px-3 py-4 space-y-0.5">
-        <div className="flex items-center justify-between px-3 pb-2">
-          <p className="text-[10px] font-sans text-text-muted uppercase tracking-widest">
-            Switch Role
-          </p>
-          <ArrowLeftRight className="w-3 h-3 text-text-muted" strokeWidth={2} />
-        </div>
-        {portalLinks.map((link) => {
-          const isActive = currentRole === link.role;
-          return (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={cn(
-                "flex items-center gap-2 px-3 py-2 rounded-md text-xs font-sans transition-all duration-150",
-                isActive
-                  ? "text-amber bg-amber-subtle/50"
-                  : "text-text-muted hover:text-text-secondary hover:bg-surface-hover"
-              )}
-            >
-              <span
-                className={cn(
-                  "w-1.5 h-1.5 rounded-full shrink-0",
-                  isActive ? "bg-amber" : "bg-surface-hover"
-                )}
+      {canSwitchPortals && (
+        <>
+          <Separator />
+          <div className="px-3 py-4 space-y-0.5">
+            <div className="flex items-center justify-between px-3 pb-2">
+              <p className="text-[10px] font-sans text-text-muted uppercase tracking-widest">
+                Switch View
+              </p>
+              <ArrowLeftRight
+                className="w-3 h-3 text-text-muted"
+                strokeWidth={2}
               />
-              {link.label}
-            </Link>
-          );
-        })}
-      </div>
+            </div>
+            {portalLinks.map((link) => {
+              const isActive = currentPortal === link.role;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-2 rounded-md text-xs font-sans transition-all duration-150",
+                    isActive
+                      ? "text-amber bg-amber-subtle/50"
+                      : "text-text-muted hover:text-text-secondary hover:bg-surface-hover"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "w-1.5 h-1.5 rounded-full shrink-0",
+                      isActive ? "bg-amber" : "bg-surface-hover"
+                    )}
+                  />
+                  {link.label}
+                </Link>
+              );
+            })}
+          </div>
+        </>
+      )}
 
-      <div className="px-5 py-4 border-t border-border">
-        <div className="flex items-center gap-3">
+      <div className="px-3 py-3 border-t border-border space-y-1">
+        <div className="flex items-center gap-3 px-2 py-2 rounded-md">
           <div className="w-7 h-7 rounded-full bg-amber/20 border border-amber/30 flex items-center justify-center shrink-0">
             <span className="text-[10px] font-semibold font-sans text-amber">
-              {config.user.initials}
+              {userInitials}
             </span>
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium font-sans text-text-primary truncate">
-              {config.user.name}
+              {userName}
             </p>
             <p className="text-[10px] font-sans text-text-muted truncate">
-              {config.user.email}
+              {userEmail}
             </p>
           </div>
         </div>
+        <button
+          type="button"
+          onClick={handleSignOut}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-xs font-sans text-text-secondary hover:text-red-expense hover:bg-red-expense-subtle/50 transition-all"
+        >
+          <LogOut className="w-3.5 h-3.5" strokeWidth={1.75} />
+          Sign out
+        </button>
       </div>
     </aside>
   );
