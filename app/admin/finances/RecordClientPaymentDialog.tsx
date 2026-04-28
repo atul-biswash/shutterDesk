@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus, DollarSign, Receipt, Loader2 } from "lucide-react";
+import { Plus, DollarSign, Receipt, Loader2, CheckCircle2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -37,10 +37,12 @@ export function RecordClientPaymentDialog({ invoices }: { invoices: Invoice[] })
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [reference, setReference] = useState("");
   const [notes, setNotes] = useState("");
+  const [success, setSuccess] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setSuccess(null);
     startTransition(async () => {
       const result = await recordClientPayment({
         invoiceId,
@@ -52,12 +54,22 @@ export function RecordClientPaymentDialog({ invoices }: { invoices: Invoice[] })
       });
 
       if (result.ok) {
-        setOpen(false);
-        setInvoiceId("");
-        setAmount("");
-        setMethod("");
-        setReference("");
-        setNotes("");
+        if (result.invoiceMarkedPaid) {
+          setSuccess(
+            "Payment recorded. Invoice is fully paid and marked as PAID."
+          );
+        } else {
+          setSuccess("Payment recorded successfully.");
+        }
+        setTimeout(() => {
+          setOpen(false);
+          setInvoiceId("");
+          setAmount("");
+          setMethod("");
+          setReference("");
+          setNotes("");
+          setSuccess(null);
+        }, 1500);
       }
     });
   };
@@ -90,6 +102,15 @@ export function RecordClientPaymentDialog({ invoices }: { invoices: Invoice[] })
           </DialogHeader>
 
           <DialogBody className="space-y-4">
+            {success && (
+              <div className="flex items-start gap-2 px-3 py-2.5 rounded-md bg-green-profit-subtle border border-green-profit/30 text-green-profit">
+                <CheckCircle2
+                  className="w-3.5 h-3.5 shrink-0 mt-0.5"
+                  strokeWidth={2}
+                />
+                <p className="text-xs font-sans leading-relaxed">{success}</p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="invoice">Associated Invoice</Label>
               <Select value={invoiceId} onValueChange={setInvoiceId} required>

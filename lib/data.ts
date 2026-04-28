@@ -12,7 +12,7 @@ export type EventListItem = {
   eventType: string | null;
   clientName: string;
   status: EventStatus;
-  photographer: { id: string; name: string } | null;
+  photographer: { id: string; name: string | null } | null;
   amount: number;
 };
 
@@ -82,7 +82,9 @@ export async function getEventsForPhotographer(photographerId: string) {
     past: past.map((e) => {
       const payout = e.payments[0];
       const eventValue = e.invoices.reduce((s, i) => s + num(i.grandTotal), 0);
-      const photographerCut = payout ? num(payout.amount) : Math.round(eventValue * 0.5 * 100) / 100;
+      const photographerCut = payout
+        ? num(payout.amount)
+        : Math.round(eventValue * 0.5 * 100) / 100;
       return {
         id: e.id,
         title: e.title,
@@ -90,7 +92,11 @@ export async function getEventsForPhotographer(photographerId: string) {
         clientName: e.clientName,
         eventType: e.eventType,
         amount: photographerCut,
-        paymentStatus: payout ? "paid" : eventValue > 0 ? "pending" : "awaiting",
+        paymentStatus: payout
+          ? "paid"
+          : eventValue > 0
+            ? "pending"
+            : "awaiting",
         payoutDate: payout?.date ?? null,
       };
     }),
@@ -102,19 +108,22 @@ export async function getPhotographerEarnings(photographerId: string) {
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const startOfYear = new Date(now.getFullYear(), 0, 1);
 
-  const [thisMonth, ytd, allTime, completedCount, eventsThisMonth] = await Promise.all([
+  const [thisMonth, ytd, completedCount, eventsThisMonth] = await Promise.all([
     prisma.payment.aggregate({
-      where: { photographerId, type: PaymentType.EXPENSE_PHOTOGRAPHER, date: { gte: startOfMonth } },
+      where: {
+        photographerId,
+        type: PaymentType.EXPENSE_PHOTOGRAPHER,
+        date: { gte: startOfMonth },
+      },
       _sum: { amount: true },
     }),
     prisma.payment.aggregate({
-      where: { photographerId, type: PaymentType.EXPENSE_PHOTOGRAPHER, date: { gte: startOfYear } },
+      where: {
+        photographerId,
+        type: PaymentType.EXPENSE_PHOTOGRAPHER,
+        date: { gte: startOfYear },
+      },
       _sum: { amount: true },
-    }),
-    prisma.payment.aggregate({
-      where: { photographerId, type: PaymentType.EXPENSE_PHOTOGRAPHER },
-      _sum: { amount: true },
-      _count: true,
     }),
     prisma.event.count({
       where: { photographerId, status: EventStatus.COMPLETED },
@@ -124,19 +133,13 @@ export async function getPhotographerEarnings(photographerId: string) {
     }),
   ]);
 
-  const completedInvoices = await prisma.invoice.findMany({
-    where: {
-      event: { photographerId, status: EventStatus.COMPLETED },
-      payments: { some: { photographerId, type: PaymentType.EXPENSE_PHOTOGRAPHER } },
-    },
-    select: { grandTotal: true },
-  });
-
   const pendingPayouts = await prisma.event.findMany({
     where: {
       photographerId,
       status: EventStatus.COMPLETED,
-      payments: { none: { photographerId, type: PaymentType.EXPENSE_PHOTOGRAPHER } },
+      payments: {
+        none: { photographerId, type: PaymentType.EXPENSE_PHOTOGRAPHER },
+      },
     },
     include: { invoices: { select: { grandTotal: true } } },
   });
@@ -157,72 +160,112 @@ export async function getPhotographerEarnings(photographerId: string) {
 }
 
 export async function getAllPhotographers() {
-  return prisma.user.findMany({
+  const list = await prisma.user.findMany({
     where: { role: Role.PHOTOGRAPHER },
     select: { id: true, name: true, email: true },
     orderBy: { name: "asc" },
   });
+  return list.map((p) => ({
+    id: p.id,
+    name: p.name ?? p.email.split("@")[0],
+    email: p.email,
+  }));
 }
 
-export async function getDashboardStats() {
-  const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+export async function getAllUsers() {
+  const users = await prisma.user.findMany({
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      createdAt: true,
+      _count: {
+        select: { assignedEvents: true },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  return users.map((u) => ({
+    id: u.id,
+    name: u.name ?? u.email.split("@")[0],
+    email: u.email,
+    role: u.role,
+    createdAt: u.createdAt,
+    assignedEventCount: u._count.assignedEvents,
+  }));
+}
+
+export async function getDashboardStatsForPeriod(year: number, month: number) {
+  const startOfPeriod = new Date(year, month, 1);
+  const endOfPeriod = new Date(year, month + 1, 0, 23, 59, 59, 999);
+  const startOfPrevPeriod = new Date(year, month - 1, 1);
+  const endOfPrevPeriod = new Date(year, month, 0, 23, 59, 59, 999);
 
   const [
     completedAll,
-    contractsThisMonth,
-    incomeThisMonth,
-    expensesThisMonth,
-    incomeLastMonth,
-    expensesLastMonth,
-    completedThisMonth,
-    completedLastMonth,
-    contractsLastMonth,
+    completedThisPeriod,
+    completedLastPeriod,
+    contractsThisPeriod,
+    contractsLastPeriod,
+    incomeThisPeriod,
+    incomeLastPeriod,
+    expensesThisPeriod,
+    expensesLastPeriod,
   ] = await Promise.all([
     prisma.event.count({ where: { status: EventStatus.COMPLETED } }),
-    prisma.invoice.count({ where: { createdAt: { gte: startOfMonth } } }),
-    prisma.payment.aggregate({
-      where: { type: PaymentType.INCOME_CLIENT, date: { gte: startOfMonth } },
-      _sum: { amount: true },
+    prisma.event.count({
+      where: {
+        status: EventStatus.COMPLETED,
+        updatedAt: { gte: startOfPeriod, lte: endOfPeriod },
+      },
+    }),
+    prisma.event.count({
+      where: {
+        status: EventStatus.COMPLETED,
+        updatedAt: { gte: startOfPrevPeriod, lte: endOfPrevPeriod },
+      },
+    }),
+    prisma.invoice.count({
+      where: { createdAt: { gte: startOfPeriod, lte: endOfPeriod } },
+    }),
+    prisma.invoice.count({
+      where: { createdAt: { gte: startOfPrevPeriod, lte: endOfPrevPeriod } },
     }),
     prisma.payment.aggregate({
-      where: { type: PaymentType.EXPENSE_PHOTOGRAPHER, date: { gte: startOfMonth } },
+      where: {
+        type: PaymentType.INCOME_CLIENT,
+        date: { gte: startOfPeriod, lte: endOfPeriod },
+      },
       _sum: { amount: true },
     }),
     prisma.payment.aggregate({
       where: {
         type: PaymentType.INCOME_CLIENT,
-        date: { gte: startOfLastMonth, lte: endOfLastMonth },
+        date: { gte: startOfPrevPeriod, lte: endOfPrevPeriod },
       },
       _sum: { amount: true },
     }),
     prisma.payment.aggregate({
       where: {
         type: PaymentType.EXPENSE_PHOTOGRAPHER,
-        date: { gte: startOfLastMonth, lte: endOfLastMonth },
+        date: { gte: startOfPeriod, lte: endOfPeriod },
       },
       _sum: { amount: true },
     }),
-    prisma.event.count({
-      where: { status: EventStatus.COMPLETED, updatedAt: { gte: startOfMonth } },
-    }),
-    prisma.event.count({
+    prisma.payment.aggregate({
       where: {
-        status: EventStatus.COMPLETED,
-        updatedAt: { gte: startOfLastMonth, lte: endOfLastMonth },
+        type: PaymentType.EXPENSE_PHOTOGRAPHER,
+        date: { gte: startOfPrevPeriod, lte: endOfPrevPeriod },
       },
-    }),
-    prisma.invoice.count({
-      where: { createdAt: { gte: startOfLastMonth, lte: endOfLastMonth } },
+      _sum: { amount: true },
     }),
   ]);
 
-  const incomeNow = num(incomeThisMonth._sum.amount);
-  const incomeBefore = num(incomeLastMonth._sum.amount);
-  const expensesNow = num(expensesThisMonth._sum.amount);
-  const expensesBefore = num(expensesLastMonth._sum.amount);
+  const incomeNow = num(incomeThisPeriod._sum.amount);
+  const incomeBefore = num(incomeLastPeriod._sum.amount);
+  const expensesNow = num(expensesThisPeriod._sum.amount);
+  const expensesBefore = num(expensesLastPeriod._sum.amount);
 
   const pctChange = (now: number, before: number) => {
     if (before === 0) return now > 0 ? 100 : 0;
@@ -231,12 +274,13 @@ export async function getDashboardStats() {
 
   return {
     completedEvents: {
-      value: completedAll,
-      change: pctChange(completedThisMonth, completedLastMonth),
+      value: completedThisPeriod,
+      total: completedAll,
+      change: pctChange(completedThisPeriod, completedLastPeriod),
     },
     newContracts: {
-      value: contractsThisMonth,
-      change: contractsThisMonth - contractsLastMonth,
+      value: contractsThisPeriod,
+      change: contractsThisPeriod - contractsLastPeriod,
     },
     totalIncome: {
       value: incomeNow,
@@ -253,10 +297,20 @@ export async function getDashboardStats() {
   };
 }
 
-export async function getRecentActivity(limit = 7) {
+export async function getRecentActivityForPeriod(
+  year: number,
+  month: number,
+  limit = 7
+) {
+  const startOfPeriod = new Date(year, month, 1);
+  const endOfPeriod = new Date(year, month + 1, 0, 23, 59, 59, 999);
+
   const payments = await prisma.payment.findMany({
+    where: { date: { gte: startOfPeriod, lte: endOfPeriod } },
     include: {
-      invoice: { include: { event: { select: { title: true, clientName: true } } } },
+      invoice: {
+        include: { event: { select: { title: true, clientName: true } } },
+      },
       event: { select: { title: true, clientName: true } },
       photographer: { select: { name: true } },
     },
@@ -270,8 +324,6 @@ export async function getRecentActivity(limit = 7) {
     const reference = isIncome
       ? p.invoice?.event?.clientName ?? "Client"
       : p.photographer?.name ?? "Photographer";
-    const invoiceId = p.invoiceId;
-
     return {
       id: p.id,
       type: p.type,
@@ -279,10 +331,26 @@ export async function getRecentActivity(limit = 7) {
       reference,
       amount: num(p.amount),
       date: p.date,
-      invoiceId,
+      invoiceId: p.invoiceId,
       isIncome,
     };
   });
+}
+
+export async function getUpcomingEventsForPeriod(year: number, month: number) {
+  const startOfPeriod = new Date(year, month, 1);
+  const endOfPeriod = new Date(year, month + 1, 0, 23, 59, 59, 999);
+
+  const events = await prisma.event.findMany({
+    where: {
+      date: { gte: startOfPeriod, lte: endOfPeriod },
+      status: EventStatus.PENDING,
+    },
+    include: { photographer: { select: { id: true, name: true } } },
+    orderBy: { date: "asc" },
+    take: 4,
+  });
+  return events;
 }
 
 export async function getInvoiceById(id: string) {
@@ -378,6 +446,48 @@ export async function getOpenInvoices() {
   }));
 }
 
+export async function getAllInvoices() {
+  const invoices = await prisma.invoice.findMany({
+    include: {
+      event: {
+        select: {
+          id: true,
+          title: true,
+          clientName: true,
+          date: true,
+          eventType: true,
+          photographer: { select: { id: true, name: true } },
+        },
+      },
+      payments: { select: { amount: true } },
+      _count: { select: { items: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return invoices.map((i) => {
+    const paid = i.payments.reduce((s, p) => s + num(p.amount), 0);
+    const total = num(i.grandTotal);
+    return {
+      id: i.id,
+      createdAt: i.createdAt,
+      grandTotal: total,
+      paidAmount: paid,
+      balance: Math.max(0, total - paid),
+      status: i.status,
+      itemCount: i._count.items,
+      event: {
+        id: i.event.id,
+        title: i.event.title,
+        clientName: i.event.clientName,
+        date: i.event.date,
+        eventType: i.event.eventType,
+        photographer: i.event.photographer,
+      },
+    };
+  });
+}
+
 export async function getPhotographerCompletedEvents(photographerId: string) {
   const events = await prisma.event.findMany({
     where: { photographerId, status: EventStatus.COMPLETED },
@@ -385,4 +495,160 @@ export async function getPhotographerCompletedEvents(photographerId: string) {
     orderBy: { date: "desc" },
   });
   return events.map((e) => ({ ...e, date: e.date }));
+}
+
+export async function getPhotographerRoster() {
+  const photographers = await prisma.user.findMany({
+    where: { role: Role.PHOTOGRAPHER },
+    include: {
+      assignedEvents: {
+        select: {
+          id: true,
+          status: true,
+          date: true,
+          invoices: { select: { grandTotal: true } },
+        },
+      },
+      payouts: {
+        where: { type: PaymentType.EXPENSE_PHOTOGRAPHER },
+        select: { amount: true },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  const now = new Date();
+
+  return photographers.map((p) => {
+    const totalEvents = p.assignedEvents.length;
+    const completedCount = p.assignedEvents.filter(
+      (e) => e.status === EventStatus.COMPLETED
+    ).length;
+    const upcomingCount = p.assignedEvents.filter(
+      (e) => e.status === EventStatus.PENDING && e.date >= now
+    ).length;
+    const totalEarned = p.payouts.reduce((s, p) => s + num(p.amount), 0);
+
+    return {
+      id: p.id,
+      name: p.name ?? p.email.split("@")[0],
+      email: p.email,
+      createdAt: p.createdAt,
+      totalEvents,
+      completedCount,
+      upcomingCount,
+      totalEarned,
+    };
+  });
+}
+
+export async function getPhotographerSchedule(photographerId: string) {
+  const now = new Date();
+
+  const events = await prisma.event.findMany({
+    where: {
+      photographerId,
+      date: { gte: now },
+    },
+    orderBy: { date: "asc" },
+  });
+
+  return events;
+}
+
+export async function getPhotographerEarningsDetail(photographerId: string) {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+  const [thisMonth, ytd, allTime] = await Promise.all([
+    prisma.payment.aggregate({
+      where: {
+        photographerId,
+        type: PaymentType.EXPENSE_PHOTOGRAPHER,
+        date: { gte: startOfMonth },
+      },
+      _sum: { amount: true },
+      _count: true,
+    }),
+    prisma.payment.aggregate({
+      where: {
+        photographerId,
+        type: PaymentType.EXPENSE_PHOTOGRAPHER,
+        date: { gte: startOfYear },
+      },
+      _sum: { amount: true },
+      _count: true,
+    }),
+    prisma.payment.aggregate({
+      where: { photographerId, type: PaymentType.EXPENSE_PHOTOGRAPHER },
+      _sum: { amount: true },
+      _count: true,
+    }),
+  ]);
+
+  const payouts = await prisma.payment.findMany({
+    where: { photographerId, type: PaymentType.EXPENSE_PHOTOGRAPHER },
+    include: {
+      event: { select: { id: true, title: true, eventType: true, clientName: true } },
+    },
+    orderBy: { date: "desc" },
+    take: 25,
+  });
+
+  const pendingEvents = await prisma.event.findMany({
+    where: {
+      photographerId,
+      status: EventStatus.COMPLETED,
+      payments: {
+        none: { photographerId, type: PaymentType.EXPENSE_PHOTOGRAPHER },
+      },
+    },
+    include: { invoices: { select: { grandTotal: true } } },
+    orderBy: { date: "desc" },
+  });
+
+  const pendingTotal = pendingEvents.reduce((sum, e) => {
+    const eventValue = e.invoices.reduce((s, i) => s + num(i.grandTotal), 0);
+    return sum + Math.round(eventValue * 0.5 * 100) / 100;
+  }, 0);
+
+  return {
+    thisMonth: {
+      total: num(thisMonth._sum.amount),
+      count: thisMonth._count,
+    },
+    yearToDate: {
+      total: num(ytd._sum.amount),
+      count: ytd._count,
+    },
+    allTime: {
+      total: num(allTime._sum.amount),
+      count: allTime._count,
+    },
+    pending: {
+      total: pendingTotal,
+      count: pendingEvents.length,
+      events: pendingEvents.map((e) => ({
+        id: e.id,
+        title: e.title,
+        date: e.date,
+        clientName: e.clientName,
+        eventType: e.eventType,
+        suggestedPayout:
+          Math.round(
+            e.invoices.reduce((s, i) => s + num(i.grandTotal), 0) * 0.5 * 100
+          ) / 100,
+      })),
+    },
+    payouts: payouts.map((p) => ({
+      id: p.id,
+      date: p.date,
+      amount: num(p.amount),
+      method: p.method,
+      eventTitle: p.event?.title ?? "—",
+      eventType: p.event?.eventType ?? null,
+      clientName: p.event?.clientName ?? "—",
+    })),
+  };
 }

@@ -6,6 +6,7 @@ const { auth } = NextAuth(authConfig);
 
 const PROTECTED_PREFIXES = ["/admin", "/office", "/photographer"];
 const PHOTOGRAPHER_BLOCKED_PREFIXES = ["/admin", "/office"];
+const ADMIN_ONLY_PREFIXES = ["/admin/users"];
 const AUTH_PREFIXES = ["/auth"];
 
 export default auth((req) => {
@@ -39,6 +40,15 @@ export default auth((req) => {
     );
     if (isBlocked) {
       return NextResponse.redirect(new URL("/photographer", nextUrl));
+    }
+  }
+
+  if (isAuthed && role !== "ADMIN") {
+    const isAdminOnly = ADMIN_ONLY_PREFIXES.some(
+      (p) => path === p || path.startsWith(p + "/")
+    );
+    if (isAdminOnly) {
+      return NextResponse.redirect(new URL("/admin", nextUrl));
     }
   }
 

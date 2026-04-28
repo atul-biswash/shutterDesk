@@ -11,6 +11,7 @@ import {
   Camera,
   Wallet,
   Users,
+  UserCog,
   ChevronRight,
   Aperture,
   ArrowLeftRight,
@@ -25,6 +26,7 @@ type NavItem = {
   href: string;
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   matchExact?: boolean;
+  adminOnly?: boolean;
 };
 
 type RoleConfig = {
@@ -43,6 +45,7 @@ const roleConfigs: Record<"admin" | "photographer" | "office", RoleConfig> = {
       { label: "Invoices", href: "/admin/invoices", icon: FileText },
       { label: "Finances", href: "/admin/finances", icon: Wallet },
       { label: "Photographers", href: "/admin/photographers", icon: Camera },
+      { label: "Users", href: "/admin/users", icon: UserCog, adminOnly: true },
     ],
   },
   photographer: {
@@ -131,7 +134,9 @@ export function Sidebar() {
         <p className="text-[10px] font-sans text-text-muted uppercase tracking-widest px-3 pb-2 pt-1">
           Navigation
         </p>
-        {config.nav.map((item) => {
+        {config.nav
+          .filter((item) => !item.adminOnly || userRole === "ADMIN")
+          .map((item) => {
           const Icon = item.icon;
           const isActive = isNavActive(item);
           return (

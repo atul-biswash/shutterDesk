@@ -20,21 +20,56 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  getDashboardStats,
-  getRecentActivity,
-  getUpcomingEvents,
+  getDashboardStatsForPeriod,
+  getRecentActivityForPeriod,
+  getUpcomingEventsForPeriod,
 } from "@/lib/data";
 import { formatBDT } from "@/lib/currency";
-import { formatDate, formatDateTime, formatDateShort } from "@/lib/constants";
+import { formatDateTime, formatDateShort } from "@/lib/constants";
+import { DashboardPeriodPicker } from "./DashboardPeriodPicker";
 
-export default async function AdminDashboard() {
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+export default async function AdminDashboard({
+  searchParams,
+}: {
+  searchParams: Promise<{ year?: string; month?: string }>;
+}) {
+  const sp = await searchParams;
+  const today = new Date();
+  const yearParam = sp.year ? parseInt(sp.year, 10) : NaN;
+  const monthParam = sp.month ? parseInt(sp.month, 10) : NaN;
+  const year =
+    Number.isFinite(yearParam) && yearParam >= 2000 && yearParam <= 2100
+      ? yearParam
+      : today.getFullYear();
+  const month =
+    Number.isFinite(monthParam) && monthParam >= 0 && monthParam <= 11
+      ? monthParam
+      : today.getMonth();
+
   const [stats, recentActivity, upcomingEvents] = await Promise.all([
-    getDashboardStats(),
-    getRecentActivity(7),
-    getUpcomingEvents(4),
+    getDashboardStatsForPeriod(year, month),
+    getRecentActivityForPeriod(year, month, 7),
+    getUpcomingEventsForPeriod(year, month),
   ]);
 
-  const today = formatDate(new Date());
+  const periodLabel = `${MONTH_NAMES[month]} ${year}`;
+  const isCurrentPeriod =
+    year === today.getFullYear() && month === today.getMonth();
 
   const formatPct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
   const formatDelta = (n: number) => `${n >= 0 ? "+" : ""}${n}`;
@@ -43,10 +78,10 @@ export default async function AdminDashboard() {
     {
       title: "Completed Events",
       value: stats.completedEvents.value.toString(),
+      sub: `${stats.completedEvents.total} total in studio`,
       change: formatPct(stats.completedEvents.change),
       trend: stats.completedEvents.change >= 0 ? "up" : "down",
       icon: CheckCircle2,
-      sub: "vs last month",
       color: "text-green-profit",
       bgColor: "bg-green-profit-subtle",
       borderColor: "border-green-profit/20",
@@ -55,10 +90,10 @@ export default async function AdminDashboard() {
     {
       title: "New Contracts",
       value: stats.newContracts.value.toString(),
+      sub: `in ${MONTH_NAMES[month]}`,
       change: formatDelta(stats.newContracts.change),
       trend: stats.newContracts.change >= 0 ? "up" : "down",
       icon: FileSignature,
-      sub: "this month",
       color: "text-amber",
       bgColor: "bg-amber-subtle",
       borderColor: "border-amber/20",
@@ -67,10 +102,10 @@ export default async function AdminDashboard() {
     {
       title: "Total Income",
       value: formatBDT(stats.totalIncome.value),
+      sub: "vs prior month",
       change: formatPct(stats.totalIncome.change),
       trend: stats.totalIncome.change >= 0 ? "up" : "down",
       icon: DollarSign,
-      sub: "vs last month",
       color: "text-green-profit",
       bgColor: "bg-green-profit-subtle",
       borderColor: "border-green-profit/20",
@@ -79,10 +114,10 @@ export default async function AdminDashboard() {
     {
       title: "Total Expenses",
       value: formatBDT(stats.totalExpenses.value),
+      sub: "vs prior month",
       change: formatPct(stats.totalExpenses.change),
       trend: stats.totalExpenses.change <= 0 ? "up" : "down",
       icon: Receipt,
-      sub: "vs last month",
       color: "text-red-expense",
       bgColor: "bg-red-expense-subtle",
       borderColor: "border-red-expense/20",
@@ -91,10 +126,10 @@ export default async function AdminDashboard() {
     {
       title: "Net Profit",
       value: formatBDT(stats.netProfit.value),
+      sub: "vs prior month",
       change: formatPct(stats.netProfit.change),
       trend: stats.netProfit.change >= 0 ? "up" : "down",
       icon: BarChart3,
-      sub: "vs last month",
       color: "text-green-profit",
       bgColor: "bg-green-profit-subtle",
       borderColor: "border-green-profit/20",
@@ -105,28 +140,27 @@ export default async function AdminDashboard() {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <Header title="Dashboard" subtitle={today} />
+      <Header title="Dashboard" subtitle={periodLabel} />
 
       <div className="flex-1 p-6 space-y-6">
         <div className="opacity-0 animate-fade-in">
           <div className="flex items-start lg:items-center justify-between mb-1 gap-4 flex-col lg:flex-row">
             <div>
               <h2 className="font-serif text-2xl text-text-primary">
-                Good morning, Admin.
+                {isCurrentPeriod ? "Good morning, Admin." : `Reporting · ${periodLabel}`}
               </h2>
               <p className="text-sm font-sans text-text-secondary mt-0.5">
-                Here&apos;s what&apos;s happening at the studio today.
+                {isCurrentPeriod
+                  ? "Here's what's happening at the studio today."
+                  : "Historical data for the selected month."}
               </p>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="hidden lg:flex items-center gap-2 text-xs font-sans text-text-muted bg-surface-raised border border-border rounded-md px-3 py-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-profit animate-pulse" />
-                {upcomingEvents.length} upcoming events
-              </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <DashboardPeriodPicker year={year} month={month} />
               <Link href="/admin/invoices/create">
                 <Button>
                   <Plus className="w-4 h-4" strokeWidth={2.5} />
-                  Create New Invoice
+                  Create Invoice
                 </Button>
               </Link>
             </div>
@@ -189,7 +223,7 @@ export default async function AdminDashboard() {
                   <div>
                     <CardTitle>Recent Activity</CardTitle>
                     <p className="text-xs font-sans text-text-muted mt-1 normal-case tracking-normal">
-                      Latest payments — incoming and outgoing
+                      Payments in {periodLabel}
                     </p>
                   </div>
                   <Link
@@ -204,7 +238,7 @@ export default async function AdminDashboard() {
                 {recentActivity.length === 0 ? (
                   <div className="px-6 py-12 text-center">
                     <p className="text-sm font-sans text-text-muted">
-                      No payments yet. Run the seed script or record a payment to get started.
+                      No payments recorded in {periodLabel}.
                     </p>
                   </div>
                 ) : (
@@ -271,7 +305,9 @@ export default async function AdminDashboard() {
                               </td>
                               <td className="px-4 py-3.5">
                                 <Badge
-                                  variant={item.isIncome ? "success" : "secondary"}
+                                  variant={
+                                    item.isIncome ? "success" : "secondary"
+                                  }
                                 >
                                   {item.isIncome ? "Income" : "Expense"}
                                 </Badge>
@@ -307,9 +343,9 @@ export default async function AdminDashboard() {
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle>Upcoming Events</CardTitle>
+                    <CardTitle>Events</CardTitle>
                     <p className="text-xs font-sans text-text-muted mt-1 normal-case tracking-normal">
-                      Next on the calendar
+                      In {periodLabel}
                     </p>
                   </div>
                   <Link
@@ -324,7 +360,7 @@ export default async function AdminDashboard() {
                 {upcomingEvents.length === 0 ? (
                   <div className="px-6 py-8 text-center">
                     <p className="text-sm font-sans text-text-muted">
-                      No upcoming events.
+                      No pending events in this period.
                     </p>
                   </div>
                 ) : (
@@ -351,7 +387,9 @@ export default async function AdminDashboard() {
                             <div className="flex items-center gap-1.5 mt-0.5">
                               <Badge
                                 variant={
-                                  event.photographer ? "secondary" : "destructive"
+                                  event.photographer
+                                    ? "secondary"
+                                    : "destructive"
                                 }
                                 className="text-[9px] px-1.5 py-0"
                               >
@@ -381,19 +419,19 @@ export default async function AdminDashboard() {
                   </div>
                   <div>
                     <p className="text-sm font-serif text-amber leading-tight">
-                      Studio Performance
+                      {periodLabel} Performance
                     </p>
                     <p className="text-xs font-sans text-text-secondary mt-1 leading-relaxed">
-                      {stats.netProfit.value > 0 ? (
+                      {stats.totalIncome.value > 0 ? (
                         <>
-                          Net profit this month is{" "}
+                          Net profit was{" "}
                           <span className="text-amber font-medium">
                             {formatBDT(stats.netProfit.value)}
                           </span>{" "}
                           on {formatBDT(stats.totalIncome.value)} of revenue.
                         </>
                       ) : (
-                        <>No revenue recorded for this month yet.</>
+                        <>No revenue recorded in this period yet.</>
                       )}
                     </p>
                     <Link

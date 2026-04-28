@@ -1,8 +1,83 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
-import { EventStatus, InvoiceStatus, PaymentType } from "@prisma/client";
+import { auth } from "@/auth";
+import { EventStatus, InvoiceStatus, PaymentType, Role } from "@prisma/client";
+
+async function requireAdmin() {
+  const session = await auth();
+  if (!session?.user || session.user.role !== Role.ADMIN) {
+    throw new Error("Unauthorized");
+  }
+  return session;
+}
+
+async function requireStaff() {
+  const session = await auth();
+  if (
+    !session?.user ||
+    (session.user.role !== Role.ADMIN && session.user.role !== Role.OFFICE)
+  ) {
+    throw new Error("Unauthorized");
+  }
+  return session;
+}
+
+export type CreateUserInput = {
+  name: string;
+  email: string;
+  password: string;
+  role: Role;
+};
+
+export type ActionResult<T = unknown> =
+  | { ok: true; data?: T }
+  | { ok: false; error: string };
+
+export async function createUser(
+  input: CreateUserInput
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    await requireAdmin();
+
+    if (!input.email || !input.password || !input.name) {
+      return { ok: false, error: "All fields are required." };
+    }
+    if (input.password.length < 8) {
+      return { ok: false, error: "Password must be at least 8 characters." };
+    }
+
+    const existing = await prisma.user.findUnique({
+      where: { email: input.email.toLowerCase() },
+    });
+    if (existing) {
+      return { ok: false, error: "A user with this email already exists." };
+    }
+
+    const hashed = await bcrypt.hash(input.password, 10);
+
+    const user = await prisma.user.create({
+      data: {
+        name: input.name.trim(),
+        email: input.email.toLowerCase().trim(),
+        password: hashed,
+        role: input.role,
+      },
+      select: { id: true },
+    });
+
+    revalidatePath("/admin/users");
+    revalidatePath("/admin/events");
+    return { ok: true, data: { id: user.id } };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Failed to create user.",
+    };
+  }
+}
 
 export type CreateEventInput = {
   title: string;
@@ -18,6 +93,8 @@ export type CreateEventInput = {
 };
 
 export async function createEvent(input: CreateEventInput) {
+  await requireStaff();
+
   const event = await prisma.event.create({
     data: {
       title: input.title,
@@ -48,6 +125,8 @@ export type CreateInvoiceInput = {
 };
 
 export async function createInvoice(input: CreateInvoiceInput) {
+  await requireStaff();
+
   const subtotal = input.items.reduce(
     (sum, i) => sum + i.quantity * i.price,
     0
@@ -109,6 +188,8 @@ export type RecordClientPaymentInput = {
 };
 
 export async function recordClientPayment(input: RecordClientPaymentInput) {
+  await requireStaff();
+
   const payment = await prisma.payment.create({
     data: {
       amount: input.amount,
@@ -126,24 +207,26 @@ export async function recordClientPayment(input: RecordClientPaymentInput) {
     include: { payments: true },
   });
 
+  let invoiceMarkedPaid = false;
   if (invoice) {
     const totalPaid = invoice.payments.reduce(
       (sum, p) => sum + Number(p.amount),
       0
     );
     const grandTotal = Number(invoice.grandTotal);
-    if (totalPaid >= grandTotal) {
+    if (totalPaid >= grandTotal && invoice.status !== InvoiceStatus.PAID) {
       await prisma.invoice.update({
         where: { id: input.invoiceId },
         data: { status: InvoiceStatus.PAID },
       });
+      invoiceMarkedPaid = true;
     }
   }
 
   revalidatePath("/admin/finances");
   revalidatePath("/admin");
   revalidatePath(`/admin/invoices/${input.invoiceId}`);
-  return { ok: true, id: payment.id };
+  return { ok: true, id: payment.id, invoiceMarkedPaid };
 }
 
 export type PayPhotographerInput = {
@@ -156,6 +239,8 @@ export type PayPhotographerInput = {
 };
 
 export async function payPhotographer(input: PayPhotographerInput) {
+  await requireStaff();
+
   const payment = await prisma.payment.create({
     data: {
       amount: input.amount,
@@ -174,16 +259,57 @@ export async function payPhotographer(input: PayPhotographerInput) {
   return { ok: true, id: payment.id };
 }
 
-export async function markEventCompleted(eventId: string) {
-  await prisma.event.update({
+export type MarkEventCompletedResult = {
+  ok: boolean;
+  payoutNeeded: boolean;
+  photographerName: string | null;
+  photographerId: string | null;
+  eventTitle: string;
+  suggestedAmount: number;
+};
+
+export async function markEventCompleted(
+  eventId: string
+): Promise<MarkEventCompletedResult> {
+  await requireStaff();
+
+  const updated = await prisma.event.update({
     where: { id: eventId },
     data: { status: EventStatus.COMPLETED },
+    include: {
+      photographer: { select: { id: true, name: true } },
+      invoices: { select: { grandTotal: true } },
+      payments: {
+        where: { type: PaymentType.EXPENSE_PHOTOGRAPHER },
+        select: { id: true },
+      },
+    },
   });
+
+  const eventValue = updated.invoices.reduce(
+    (sum, inv) => sum + Number(inv.grandTotal),
+    0
+  );
+  const alreadyPaid = updated.payments.length > 0;
+  const payoutNeeded = !!updated.photographer && !alreadyPaid;
+
   revalidatePath("/admin/events");
   revalidatePath("/admin");
+  revalidatePath("/photographer");
+
+  return {
+    ok: true,
+    payoutNeeded,
+    photographerName: updated.photographer?.name ?? null,
+    photographerId: updated.photographer?.id ?? null,
+    eventTitle: updated.title,
+    suggestedAmount: Math.round(eventValue * 0.5 * 100) / 100,
+  };
 }
 
 export async function markInvoicePaid(invoiceId: string) {
+  await requireStaff();
+
   await prisma.invoice.update({
     where: { id: invoiceId },
     data: { status: InvoiceStatus.PAID },
