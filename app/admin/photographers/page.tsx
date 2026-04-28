@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Camera, Mail, Calendar, Wallet, ArrowUpRight, UserPlus } from "lucide-react";
+import { Camera, Mail, Wallet, ArrowUpRight, UserPlus } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

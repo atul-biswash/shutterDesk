@@ -1,5 +1,19 @@
-import { Aperture } from "lucide-react";
+import { Suspense } from "react";
+import { Aperture, Loader2 } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import { SignInForm } from "./SignInForm";
+
+export const dynamic = "force-dynamic";
+
+function SignInFormSkeleton() {
+  return (
+    <Card className="border-border shadow-card-hover">
+      <CardContent className="p-8 flex items-center justify-center min-h-[420px]">
+        <Loader2 className="w-5 h-5 text-amber animate-spin" strokeWidth={1.75} />
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function SignInPage() {
   return (
@@ -18,7 +32,9 @@ export default function SignInPage() {
         </div>
       </div>
 
-      <SignInForm />
+      <Suspense fallback={<SignInFormSkeleton />}>
+        <SignInForm />
+      </Suspense>
 
       <p className="text-center text-[11px] font-sans text-text-muted">
         By signing in, you agree to ShutterDesk&apos;s terms of service.

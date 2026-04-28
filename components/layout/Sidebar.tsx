@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   Calendar,
   FileText,
-  CreditCard,
   Camera,
   Wallet,
   Users,
