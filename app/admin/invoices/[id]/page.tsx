@@ -1,16 +1,17 @@
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import {
   ArrowLeft,
   Send,
   CheckCircle2,
-  Aperture,
   Pencil,
   MapPin,
   CalendarDays,
   Phone,
   Mail,
 } from "lucide-react";
+import logo from "@/public/logo.png";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { PrintButton } from "./PrintButton";
@@ -79,22 +80,20 @@ export default async function InvoiceDetailPage({
           <div className="invoice-paper bg-paper text-paper-ink rounded-lg shadow-paper print:shadow-none border border-paper-line print:border-0 overflow-hidden">
             <div className="px-12 pt-12 pb-8 print:px-10 print:pt-10 print:pb-6">
               <div className="flex items-start justify-between border-b-2 border-paper-ink pb-7">
-                <div className="flex items-start gap-4">
-                  <div className="w-14 h-14 rounded-md bg-paper-ink flex items-center justify-center shrink-0">
-                    <Aperture className="w-7 h-7 text-amber" strokeWidth={1.5} />
-                  </div>
-                  <div>
-                    <p className="font-serif text-3xl text-paper-ink leading-none">
-                      ShutterDesk
-                    </p>
-                    <p className="text-[10px] font-sans uppercase tracking-[0.3em] text-paper-subtle mt-1.5">
-                      Photography Studio
-                    </p>
-                    <div className="mt-3 text-[11px] font-sans text-paper-muted space-y-0.5 leading-relaxed">
-                      <p>92 Bridgewater Avenue, Suite 4B</p>
-                      <p>Dhaka 1212, Bangladesh</p>
-                      <p>hello@shutterdesk.com · +880 2 5566 7788</p>
-                    </div>
+                <div>
+                  <Image
+                    src={logo}
+                    alt="Ambient Bliss"
+                    className="h-24 w-auto -ml-1"
+                    priority
+                  />
+                  <p className="text-[10px] font-sans uppercase tracking-[0.3em] text-paper-subtle mt-3">
+                    Photography Studio
+                  </p>
+                  <div className="mt-3 text-[11px] font-sans text-paper-muted space-y-0.5 leading-relaxed">
+                    <p>House 16, Road 3/D, Sector 9</p>
+                    <p>Uttara, Dhaka, Bangladesh</p>
+                    <p>ambientblissbd@gmail.com · +880 13 2945 6821</p>
                   </div>
                 </div>
 
@@ -304,7 +303,7 @@ export default async function InvoiceDetailPage({
 
               <div className="mt-10 pt-6 border-t border-paper-line text-center">
                 <p className="font-serif text-base text-paper-ink italic">
-                  Thank you for choosing ShutterDesk.
+                  Thank you for choosing Ambient Bliss.
                 </p>
                 <p className="text-[10px] font-sans uppercase tracking-[0.3em] text-paper-subtle mt-2">
                   Capturing moments · Crafting memories
@@ -313,7 +312,7 @@ export default async function InvoiceDetailPage({
             </div>
 
             <div className="bg-paper-line/40 px-12 py-3 print:px-10 flex items-center justify-between text-[10px] font-sans text-paper-subtle">
-              <span>shutterdesk.com</span>
+              <span>ambientblissbd@gmail.com</span>
               <span className="font-mono">
                 {invoice.id.slice(0, 12).toUpperCase()} · Page 1 of 1
               </span>
